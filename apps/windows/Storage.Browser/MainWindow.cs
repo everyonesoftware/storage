@@ -33,6 +33,7 @@ public sealed partial class MainWindow : Window
         root = (Grid)XamlReader.Load(reader.ReadToEnd());
         Content = root; Title = "Storage";
         ExtendsContentIntoTitleBar = true; SetTitleBar(C<Border>("TitleBar"));
+        AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "Storage.ico"));
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1360, 900));
         var title = AppWindow.TitleBar;
         title.ButtonBackgroundColor = ColorHelper.FromArgb(255, 23, 33, 41);

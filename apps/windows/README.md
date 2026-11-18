@@ -57,6 +57,12 @@ DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 /opt/data/tools/dotnet/dotnet build \
 
 The last command is a **C# compile-only gate**, not an executable/deployment. The override bypasses Linux-incompatible MRT/PRI work only for that invocation. Native Windows defaults retain self-contained WinUI/runtime and **PRI generation enabled**; `resources.pri` is required at publish. Theme resources are merged on launch, not prematurely in the `Application` constructor.
 
+### Windows application icon
+
+The Browser embeds `Assets/Storage.ico` as its executable icon and applies the same published asset through `AppWindow.SetIcon` for the running window/taskbar. It reuses Storage's existing teal folder artwork, with 16–256 px images for taskbar and high-DPI sizes. The runtime icon is copied on both build and publish, and installer payload validation requires it. WinUI gets exactly one icon Content item to avoid duplicate PRI entries.
+
+Regenerate the checked-in ICO with `node scripts/generate-windows-icons.mjs`; the dependency-free generator reads the Android Browser's existing `ic_storage.xml` and rejects unsupported artwork changes rather than silently producing a stale icon. `node --test tests/windows-release.test.mjs` checks regeneration, decodes every ICO size and protects executable/window/publish wiring. Actual taskbar appearance and existing pinned-shortcut behavior still require native Windows verification after installing the changed build.
+
 TDD evidence: framing, public argument validation/command construction, authorization decision policy and pipe/SDK/native integration were introduced after observed missing-API failures; export SHA verification and wrong-type revision validation had observed RED failures before implementation/fix. Tests are an executable console harness and must be run with `dotnet run`, not `dotnet test` (which would not execute these assertions).
 
 ## Build and run on native Windows

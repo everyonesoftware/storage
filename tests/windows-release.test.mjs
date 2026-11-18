@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { inflateSync } from 'node:zlib';
 const root = resolve(import.meta.dirname, '..');
 const read = p => readFileSync(join(root, p), 'utf8').replaceAll('\r\n','\n');
 const pwsh = process.env.PWSH ?? (existsSync('/opt/data/tools/powershell-7.5.4/pwsh') ? '/opt/data/tools/powershell-7.5.4/pwsh' : 'pwsh');
@@ -19,6 +21,49 @@ test('native Windows packaging exists and preserves exact Storage Velopack contr
  const app = read('apps/windows/Storage.Browser/Program.cs');
  assert.ok(app.indexOf('SetAutoApplyOnStartup(false)') < app.indexOf('InitializeComWrappers'));
  assert.match(app,/OnBeforeUninstall/);
+});
+test('Windows Browser supplies the Storage icon to executable, running window and published payload', () => {
+ const project=read('apps/windows/Storage.Browser/Storage.Browser.csproj');
+ assert.match(project, /<ApplicationIcon>Assets\/Storage\.ico<\/ApplicationIcon>/);
+ assert.match(project, /<Content Remove="Assets\/Storage\.ico"\s*\/>/);
+ assert.match(project, /<None Remove="Assets\/Storage\.ico"\s*\/>/);
+ assert.match(project, /<Content Include="Assets\/Storage\.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"\s*\/>/);
+ const window=read('apps/windows/Storage.Browser/MainWindow.cs');
+ assert.match(window, /AppWindow\.SetIcon\(Path\.Combine\(AppContext\.BaseDirectory, "Assets", "Storage\.ico"\)\)/);
+ assert.ok(window.indexOf('AppWindow.SetIcon(') < window.indexOf('AppWindow.Resize('));
+ const packager=read('scripts/build-windows-installer.ps1');
+ assert.match(packager, /'Assets\/Storage\.ico'/);
+});
+test('Storage ICO regenerates from product artwork and decodes at every taskbar and high-DPI size', t => {
+ const directory=mkdtempSync(join(process.env.TMPDIR || tmpdir(),'storage-windows-icon-'));
+ t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ const result=spawnSync(process.execPath,['scripts/generate-windows-icons.mjs','--output-directory',directory],{cwd:root,encoding:'utf8',timeout:30000});
+ assert.equal(result.status,0,result.stdout+result.stderr);
+ const icon=readFileSync(join(directory,'Storage.ico'));
+ assert.deepEqual(icon,readFileSync(join(root,'apps/windows/Storage.Browser/Assets/Storage.ico')));
+ assert.equal(icon.readUInt16LE(0),0); assert.equal(icon.readUInt16LE(2),1);
+ const sizes=[16,20,24,32,40,48,64,96,128,256];
+ assert.equal(icon.readUInt16LE(4),sizes.length);
+ let expectedOffset=6+16*sizes.length;
+ for(const [index,size] of sizes.entries()) {
+  const entry=6+16*index, length=icon.readUInt32LE(entry+8), offset=icon.readUInt32LE(entry+12);
+  assert.equal(icon[entry] || 256,size); assert.equal(icon[entry+1] || 256,size);
+  assert.equal(icon.readUInt16LE(entry+4),1); assert.equal(icon.readUInt16LE(entry+6),32);
+  assert.equal(offset,expectedOffset); expectedOffset+=length;
+  const png=icon.subarray(offset,offset+length);
+  assert.deepEqual(png.subarray(0,8),Buffer.from([137,80,78,71,13,10,26,10]));
+  assert.equal(png.readUInt32BE(16),size); assert.equal(png.readUInt32BE(20),size);
+  assert.equal(png[24],8); assert.equal(png[25],6);
+  const compressed=[];
+  for(let p=8;p<png.length;) { const n=png.readUInt32BE(p),type=png.toString('ascii',p+4,p+8); if(type==='IDAT')compressed.push(png.subarray(p+8,p+8+n)); p+=12+n; assert.ok(p<=png.length); }
+  const pixels=inflateSync(Buffer.concat(compressed)); assert.equal(pixels.length,size*(1+size*4));
+  for(let y=0;y<size;y++)assert.equal(pixels[y*(1+size*4)],0);
+  const pixel=(x,y)=>[...pixels.subarray(y*(1+size*4)+1+x*4,y*(1+size*4)+5+x*4)];
+  assert.equal(pixel(0,0)[3],0,'transparent outside rounded product tile');
+  assert.deepEqual(pixel(Math.floor(size*.2),Math.floor(size*.6)),[0,107,100,255],'Storage teal background');
+  assert.deepEqual(pixel(Math.floor(size*.35),Math.floor(size*.43)),[232,255,252,255],'Storage folder artwork');
+ }
+ assert.equal(expectedOffset,icon.length);
 });
 test('PowerShell scripts parse, and non-Windows execution fails closed', () => {
  for (const script of ['build-windows-installer.ps1','test-windows-installer.ps1']) {

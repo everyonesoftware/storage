@@ -65,7 +65,7 @@ function Assert-PackagedPayload([string]$PublishDirectory, [string]$PackagePath)
 }
 function Assert-StandalonePayload([string]$Directory, [string]$ReleaseVersion, [string]$Commit) {
     foreach ($name in @('Storage.Browser.exe','Storage.Browser.dll','Storage.Browser.deps.json','Storage.Browser.runtimeconfig.json',
-        'resources.pri','Microsoft.UI.Xaml.dll','Microsoft.WindowsAppRuntime.dll','coreclr.dll','hostfxr.dll',
+        'resources.pri','Assets/Storage.ico','Microsoft.UI.Xaml.dll','Microsoft.WindowsAppRuntime.dll','coreclr.dll','hostfxr.dll',
         'Service/Storage.Service.exe','Service/Storage.Service.dll','Service/Storage.Service.deps.json','Service/Storage.Service.runtimeconfig.json',
         'Service/coreclr.dll','Service/hostfxr.dll','Service/storage_core.dll')) {
         $file = Get-Item -LiteralPath (Join-Path $Directory $name)
