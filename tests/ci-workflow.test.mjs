@@ -101,3 +101,23 @@ test('all third-party actions are immutable commit pins and version derives from
  assert.match(text, /persist-credentials: false/);
  assert.match(text, /release\.mjs version/);
 });
+
+test('docs-only repair reaches serialized refresh without publishing absent artifacts or spawning another job', () => {
+ const text = workflow(), release = job(text, 'release');
+ const guard = /^    if: (.+)$/m.exec(release)[1];
+ const evaluate = ({ validate = 'success', android = 'skipped', windows = 'skipped', ref = 'refs/heads/main', event = 'push', cancelled = false } = {}) => {
+  const expression = guard.replaceAll('always()', 'true').replaceAll('cancelled()', String(cancelled))
+   .replaceAll('needs.validate.result', JSON.stringify(validate)).replaceAll('needs.android.result', JSON.stringify(android)).replaceAll('needs.windows.result', JSON.stringify(windows))
+   .replaceAll('github.ref', JSON.stringify(ref)).replaceAll('github.event_name', JSON.stringify(event));
+  return Function(`return (${expression})`)();
+ };
+ assert.equal(evaluate(), true, 'docs-only main run must repair download tables');
+ assert.equal(evaluate({ event: 'workflow_dispatch' }), true);
+ assert.equal(evaluate({ validate: 'failure' }), false); assert.equal(evaluate({ event: 'pull_request' }), false); assert.equal(evaluate({ cancelled: true }), false);
+ assert.equal(evaluate({ ref: 'refs/heads/feature' }), false);
+ assert.match(release, /name: Publish successful platform inventories[^\n]*\n\s+if: success\(\) && \(needs.android.result == 'success' \|\| needs.windows.result == 'success'\)/);
+ assert.match(release, /name: Refresh current platform downloads\n\s+if: always\(\) && !cancelled\(\)/);
+ assert.match(release, /GH_TOKEN: \$\{\{ github.token \}\}/);
+ assert.ok(release.trimEnd().endsWith('node scripts/current-downloads.mjs --repository "$GITHUB_REPOSITORY" --publish'));
+ assert.match(job(text, 'validate'), /node --test .*tests\/current-downloads.test.mjs/);
+});

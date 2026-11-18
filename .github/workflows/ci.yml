@@ -52,7 +52,7 @@ jobs:
           mkdir -p "$TMPDIR"
           node scripts/lint-workflow.mjs --actionlint "$RUNNER_TEMP/actionlint/actionlint"
       - name: Test release selection, manifests, publication and workflow guards
-        run: node --test tests/release.test.mjs tests/ci-workflow.test.mjs tests/android-release.test.mjs tests/windows-release.test.mjs
+        run: node --test tests/release.test.mjs tests/current-downloads.test.mjs tests/ci-workflow.test.mjs tests/android-release.test.mjs tests/windows-release.test.mjs
       - name: Select changed platforms from verified publications
         id: select
         env:
@@ -264,7 +264,7 @@ jobs:
 
   release:
     needs: [validate, android, windows]
-    if: always() && !cancelled() && needs.validate.result == 'success' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && (needs.android.result == 'success' || needs.windows.result == 'success')
+    if: always() && !cancelled() && needs.validate.result == 'success' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -297,6 +297,7 @@ jobs:
           path: dist/windows
           digest-mismatch: error
       - name: Publish successful platform inventories and read back exact bytes
+        if: success() && (needs.android.result == 'success' || needs.windows.result == 'success')
         env:
           GH_TOKEN: ${{ github.token }}
           ANDROID_SUCCESS: ${{ needs.android.result == 'success' }}
@@ -308,3 +309,8 @@ jobs:
           if [[ "$ANDROID_SUCCESS" == true ]]; then args+=(--android-directory dist/android); fi
           if [[ "$WINDOWS_SUCCESS" == true ]]; then args+=(--windows-directory dist/windows); fi
           node scripts/release.mjs publish "${args[@]}"
+      - name: Refresh current platform downloads
+        if: always() && !cancelled()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/current-downloads.mjs --repository "$GITHUB_REPOSITORY" --publish

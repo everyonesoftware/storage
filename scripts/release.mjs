@@ -110,7 +110,7 @@ function repositoryName(repository) {
 export function githubClient(repository, { run = spawnSync } = {}) {
   repositoryName(repository);
   const request = (path, { optional = false, binary = false } = {}) => {
-    const args = ['api', `repos/${repository}/${path}`];
+    const args = ['api', `repos/${repository}${path ? '/' + path : ''}`];
     if (binary) args.push('-H', 'Accept: application/octet-stream');
     const result = run('gh', args, { encoding: 'utf8', shell: false, timeout: 120_000, maxBuffer: binary ? MANIFEST_LIMIT : 4 * 1024 * 1024 });
     if (result.error || result.status !== 0) {
@@ -172,7 +172,7 @@ function stableReleases(api) {
   }
   return releases.sort((a, b) => Number(b.tag_name.slice(5)) - Number(a.tag_name.slice(5)));
 }
-export function publishedBaseline(platform, { api }) {
+export function publishedBaseline(platform, { api, details = false }) {
   if (!PLATFORMS.includes(platform)) throw new Error('Invalid platform.');
   for (const release of stableReleases(api)) {
     const count = Number(release.tag_name.slice(5));
@@ -184,7 +184,7 @@ export function publishedBaseline(platform, { api }) {
     const manifest = validateManifest(api.manifest(marker), platform, source);
     for (const record of manifest.files) checkAsset(uniqueAsset(assets, record.name), record);
     if (resolveTag(api, source.tag) !== source.sha) throw new Error('Published tag/source mismatch.');
-    return source.sha;
+    return details ? { source, release, manifest, assets } : source.sha;
   }
   return null;
 }

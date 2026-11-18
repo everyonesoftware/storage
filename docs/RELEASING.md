@@ -13,6 +13,8 @@ Pushes to main run automatically. Pull requests validate/build but never publish
 
 A failed platform never advances its publication baseline. Another successful platform may still publish; the overall workflow remains failed because of the failed build. Unchanged platforms keep their original release assets, source SHA and version. They are not copied or relabeled into a newer release. A docs-only/no-op push creates no empty release.
 
+The final serialized job also refreshes the root README and newest stable release's **Current downloads** table from verified platform publications, including a repair pass on main-branch docs-only/no-op runs. Android links include both required APKs; unchanged platform downloads remain at their original URLs and versions. See [current download discovery](CURRENT-DOWNLOADS.md) for read-only previews, write authorization and concurrency limits.
+
 ## Signing configuration and remaining activation
 
 The repository was empty and had no signing secrets when this workflow was prepared. Dan separately authorized creation/configuration on November 18, 2026. A dedicated Storage RSA-4096 signing identity was generated and all four repository Actions secrets below were uploaded and verified through their exact GitHub metadata endpoints. A temporary APK was actually signed and its signer verified locally; the temporary APK was removed. Signing setup did not itself commit, push or publish a release. Activation requires the committed workflow to be pushed and its exact-source hosted run monitored and verified.

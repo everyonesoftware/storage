@@ -1,5 +1,20 @@
 # Storage
 
+<!-- current-downloads:start -->
+## Current downloads
+
+Choose your platform. Each platform keeps its newest verified manifest-backed publication; versions may differ.
+
+| Platform | Version | Download | Status |
+| --- | --- | --- | --- |
+| Windows x64 | 0.1.6 | [Installer (.exe)](https://github.com/everyonesoftware/storage/releases/download/v0.1.6/StorageWindows-win-x64-Setup.exe) · [SHA-256](https://github.com/everyonesoftware/storage/releases/download/v0.1.6/StorageWindows-win-x64-Setup.exe.sha256) | Unsigned; Windows may show an unknown-publisher/SmartScreen warning. |
+| Android | 0.1.2 | [Service APK](https://github.com/everyonesoftware/storage/releases/download/v0.1.2/Storage-Service-0.1.2.apk) · [Browser APK](https://github.com/everyonesoftware/storage/releases/download/v0.1.2/Storage-Browser-0.1.2.apk) · [SHA-256](https://github.com/everyonesoftware/storage/releases/download/v0.1.2/Storage-android-SHA256SUMS) | Install Service first, then Browser. Signed with the Storage release key. |
+
+Verify SHA-256 checksums before installation. Unchanged platforms retain their original release, version and source identity. These downloads are not an in-app update feed.
+<!-- current-downloads:end -->
+
+The tables refresh automatically after publication. See [current download discovery](docs/CURRENT-DOWNLOADS.md) for preview commands and refresh behavior.
+
 A native Windows/Android storage platform in development. Applications address logical Items, immutable ItemVersions and Collections through a device service—not filesystem repositories or other devices.
 
 ## Current scope
