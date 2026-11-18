@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+ <uses-permission android:name="com.everyonesoftware.storage.BIND_STORAGE" />
+ <queries><package android:name="com.everyonesoftware.storage.service" /></queries>
+ <application android:label="Storage denied-caller test fixture" android:allowBackup="false" />
+</manifest>

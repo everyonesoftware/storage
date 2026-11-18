@@ -1,0 +1,310 @@
+name: Storage CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: Select affected platforms automatically, or force a platform rebuild
+        type: choice
+        options: [auto, all, android, windows]
+        default: auto
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  RUSTUP_TOOLCHAIN: '1.100.0'
+  CARGO_BUILD_JOBS: '2'
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      TMPDIR: ${{ github.workspace }}/artifacts/tmp
+      CARGO_TARGET_DIR: ${{ github.workspace }}/artifacts/cargo
+    outputs:
+      android: ${{ steps.select.outputs.android }}
+      windows: ${{ steps.select.outputs.windows }}
+      android_changed: ${{ steps.select.outputs.android_changed }}
+      windows_changed: ${{ steps.select.outputs.windows_changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Validate workflow syntax with pinned actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz --output "$RUNNER_TEMP/actionlint.tar.gz"
+          printf '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  %s\n' "$RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check -
+          mkdir -p "$RUNNER_TEMP/actionlint"
+          tar --extract --gzip --file "$RUNNER_TEMP/actionlint.tar.gz" --directory "$RUNNER_TEMP/actionlint" actionlint
+          mkdir -p "$TMPDIR"
+          node scripts/lint-workflow.mjs --actionlint "$RUNNER_TEMP/actionlint/actionlint"
+      - name: Test release selection, manifests, publication and workflow guards
+        run: node --test tests/release.test.mjs tests/ci-workflow.test.mjs tests/android-release.test.mjs tests/windows-release.test.mjs
+      - name: Select changed platforms from verified publications
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_COMPONENT: ${{ github.event_name == 'workflow_dispatch' && inputs.component || 'auto' }}
+        run: node scripts/release.mjs select --repository "$GITHUB_REPOSITORY" --target "$TARGET_COMPONENT" --github-output "$GITHUB_OUTPUT"
+      - name: Install pinned Rust validation components
+        run: rustup toolchain install 1.100.0 --profile minimal --component rustfmt --component clippy
+      - name: Test transactional core and native ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo test --workspace --locked
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo build --locked -p storage-core --release
+          mkdir -p artifacts/native/linux-x64
+          cp "$CARGO_TARGET_DIR/release/libstorage_core.so" artifacts/native/linux-x64/
+          bash scripts/test-native-abi.sh
+
+  android:
+    needs: validate
+    if: needs.validate.outputs.android == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      TMPDIR: ${{ github.workspace }}/artifacts/tmp
+      CARGO_TARGET_DIR: ${{ github.workspace }}/artifacts/cargo
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - name: Prepare Android temporary workspace
+        run: mkdir -p "$TMPDIR"
+      - name: Derive version from full committed history
+        id: version
+        run: node scripts/release.mjs version --github-output "$GITHUB_OUTPUT"
+      - name: Install pinned Android SDK and NDK
+        shell: bash
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.14206865"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
+      - name: Install pinned Android Rust cross targets
+        run: |
+          rustup toolchain install 1.100.0 --profile minimal
+          rustup target add --toolchain 1.100.0 aarch64-linux-android x86_64-linux-android
+      - name: Build actual Android native engines
+        run: bash scripts/build-android-native.sh
+      - name: Build native-containing test APKs, unit tests and lint
+        env:
+          COMMIT_COUNT: ${{ steps.version.outputs.count }}
+        run: |
+          bash apps/android/gradlew -p apps/android :service:testDebugUnitTest :service:lintDebug :service:assembleDebug :service:assembleDebugAndroidTest :browser:lintDebug :browser:assembleDebug :browser:assembleDebugAndroidTest :denied:assembleDebug :denied:assembleDebugAndroidTest "-PstorageCommitCount=$COMMIT_COUNT" --no-daemon --max-workers=2
+      - name: Verify release signing configuration fails closed
+        env:
+          STORAGE_ANDROID_GRADLE_TESTS: '1'
+        run: node --test tests/android-release.test.mjs
+      - name: Enable KVM on the ephemeral hosted runner
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-storage-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Test real service authorization, transfer integrity and Browser
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2
+        with:
+          api-level: 29
+          target: default
+          arch: x86_64
+          emulator-port: 5554
+          avd-name: storage-ci
+          cores: 2
+          ram-size: 2048M
+          disable-animations: true
+          disable-spellchecker: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -Vulkan -camera-back none -camera-front none
+          script: |
+            adb -s emulator-5554 shell wm size 412x915
+            adb -s emulator-5554 shell wm density 160
+            bash apps/android/validate-device.sh emulator-5554
+      - name: Build signed Android release installers
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          COMMIT_COUNT: ${{ steps.version.outputs.count }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          STORAGE_KEYSTORE_BASE64: ${{ secrets.STORAGE_KEYSTORE_BASE64 }}
+          STORAGE_KEYSTORE_PASSWORD: ${{ secrets.STORAGE_KEYSTORE_PASSWORD }}
+          STORAGE_KEY_ALIAS: ${{ secrets.STORAGE_KEY_ALIAS }}
+          STORAGE_KEY_PASSWORD: ${{ secrets.STORAGE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in STORAGE_KEYSTORE_BASE64 STORAGE_KEYSTORE_PASSWORD STORAGE_KEY_ALIAS STORAGE_KEY_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing repository secret: $name. See docs/RELEASING.md."
+              exit 1
+            fi
+          done
+          umask 077
+          export STORAGE_KEYSTORE_PATH="$RUNNER_TEMP/storage-release.jks"
+          trap 'rm -f "$STORAGE_KEYSTORE_PATH"' EXIT
+          printf '%s' "$STORAGE_KEYSTORE_BASE64" | base64 --decode > "$STORAGE_KEYSTORE_PATH"
+          bash apps/android/gradlew -p apps/android :service:assembleRelease :browser:assembleRelease "-PstorageCommitCount=$COMMIT_COUNT" --no-daemon --max-workers=2
+          node scripts/package-android.mjs --version "$RELEASE_VERSION" --directory dist/android
+          node scripts/release.mjs manifest --platform android --directory dist/android
+      - name: Retain Android test and GUI diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: storage-android-diagnostics-${{ github.sha }}
+          overwrite: true
+          path: |
+            apps/android/build/device-validation/
+            apps/android/service/build/reports/
+            apps/android/browser/build/reports/
+          if-no-files-found: warn
+          retention-days: 14
+          include-hidden-files: false
+      - name: Retain verified Android release
+        if: success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: storage-android-release-${{ github.sha }}
+          overwrite: true
+          path: dist/android/
+          if-no-files-found: error
+          retention-days: 30
+          include-hidden-files: false
+
+  windows:
+    needs: validate
+    if: needs.validate.outputs.windows == 'true'
+    runs-on: windows-2025
+    timeout-minutes: 45
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/artifacts/cargo
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: '10.0.404'
+      - name: Derive version from full committed history
+        id: version
+        shell: pwsh
+        run: node scripts/release.mjs version --github-output "$env:GITHUB_OUTPUT"
+      - name: Build and test the actual Windows native engine
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          rustup toolchain install 1.100.0 --profile minimal
+          if ($LASTEXITCODE -ne 0) { throw 'Rust toolchain installation failed.' }
+          rustup target add x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { throw 'Windows Rust target installation failed.' }
+          cargo test --workspace --locked
+          if ($LASTEXITCODE -ne 0) { throw 'Native Windows repository tests failed.' }
+          cargo build --locked -p storage-core --release --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { throw 'Windows native engine build failed.' }
+          New-Item -ItemType Directory -Force artifacts/native/windows-x64 | Out-Null
+          Copy-Item (Join-Path $env:CARGO_TARGET_DIR 'x86_64-pc-windows-msvc/release/storage_core.dll') artifacts/native/windows-x64/storage_core.dll
+          dotnet run --project apps/windows/Storage.Tests --configuration Release -- (Resolve-Path artifacts/native/windows-x64/storage_core.dll).Path
+          if ($LASTEXITCODE -ne 0) { throw 'Native Windows client/service assertions failed.' }
+      - name: Test Windows release and installer contracts
+        run: node --test tests/windows-release.test.mjs
+      - name: Build complete native Windows installer and update inventory
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+        run: ./scripts/build-windows-installer.ps1 -Version $env:RELEASE_VERSION -SourceCommit $env:GITHUB_SHA -NativeDll artifacts/native/windows-x64/storage_core.dll -OutputDirectory dist/windows -AllowUnsigned
+      - name: Install, render, verify service IPC and uninstall
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./scripts/test-windows-installer.ps1 -InstallerPath dist/windows/StorageWindows-win-x64-Setup.exe -EvidenceDirectory artifacts/windows-smoke
+      - name: Validate Windows inventory and source manifest
+        run: node scripts/release.mjs manifest --platform windows --directory dist/windows
+      - name: Retain Windows lifecycle diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: storage-windows-diagnostics-${{ github.sha }}
+          overwrite: true
+          path: artifacts/windows-smoke/
+          if-no-files-found: warn
+          retention-days: 30
+          include-hidden-files: false
+      - name: Retain verified Windows release
+        if: success() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: storage-windows-release-${{ github.sha }}
+          overwrite: true
+          path: dist/windows/
+          if-no-files-found: error
+          retention-days: 30
+          include-hidden-files: false
+
+  release:
+    needs: [validate, android, windows]
+    if: always() && !cancelled() && needs.validate.result == 'success' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && (needs.android.result == 'success' || needs.windows.result == 'success')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+    concurrency:
+      group: storage-release-publication
+      cancel-in-progress: false
+      queue: max
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Download this run's verified Android release
+        if: needs.android.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: storage-android-release-${{ github.sha }}
+          path: dist/android
+          digest-mismatch: error
+      - name: Download this run's verified Windows release
+        if: needs.windows.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: storage-windows-release-${{ github.sha }}
+          path: dist/windows
+          digest-mismatch: error
+      - name: Publish successful platform inventories and read back exact bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANDROID_SUCCESS: ${{ needs.android.result == 'success' }}
+          WINDOWS_SUCCESS: ${{ needs.windows.result == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--repository "$GITHUB_REPOSITORY")
+          if [[ "$ANDROID_SUCCESS" == true ]]; then args+=(--android-directory dist/android); fi
+          if [[ "$WINDOWS_SUCCESS" == true ]]; then args+=(--windows-directory dist/windows); fi
+          node scripts/release.mjs publish "${args[@]}"

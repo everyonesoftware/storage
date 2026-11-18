@@ -1,0 +1,4 @@
+**/bin/
+**/obj/
+.native-test-build/
+artifacts/

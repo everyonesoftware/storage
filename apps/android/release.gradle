@@ -1,0 +1,43 @@
+// Shared by the two product APKs; denied remains a debug-only test fixture.
+def committedCount = providers.gradleProperty('storageCommitCount').orNull
+def releaseCount = null
+if (committedCount != null) {
+    if (!(committedCount ==~ /[1-9][0-9]*/) || !committedCount.isInteger() || !(committedCount.toInteger() in 1..65534)) {
+        throw new GradleException('storageCommitCount must be an integer in 1..65534')
+    }
+    releaseCount = committedCount.toInteger()
+}
+def signingNames = ['STORAGE_KEYSTORE_PATH', 'STORAGE_KEYSTORE_PASSWORD', 'STORAGE_KEY_ALIAS', 'STORAGE_KEY_PASSWORD']
+def signingValues = signingNames.collect { providers.environmentVariable(it).orNull }
+def hasAnySigning = signingValues.any { it != null }
+def hasCompleteSigning = signingValues.every { it != null && !it.trim().isEmpty() }
+def signingError = 'Android release signing requires all four STORAGE_KEYSTORE_PATH, STORAGE_KEYSTORE_PASSWORD, STORAGE_KEY_ALIAS, STORAGE_KEY_PASSWORD values'
+if (hasAnySigning && !hasCompleteSigning) throw new GradleException(signingError)
+def releaseKey = hasCompleteSigning ? file(signingValues[0]) : null
+if (releaseKey != null && !releaseKey.isFile()) throw new GradleException('Android release keystore file does not exist')
+android {
+    defaultConfig {
+        versionCode = releaseCount ?: 1
+        versionName = "0.1.${releaseCount ?: 0}"
+    }
+    if (hasCompleteSigning) {
+        signingConfigs {
+            storageRelease {
+                storeFile = releaseKey
+                storePassword = signingValues[1]
+                keyAlias = signingValues[2]
+                keyPassword = signingValues[3]
+            }
+        }
+        buildTypes.release.signingConfig = signingConfigs.storageRelease
+    }
+}
+// Resolved graph catches indirect (`build`) and abbreviated task requests too.
+def productProject = project
+gradle.taskGraph.whenReady { graph ->
+    if (graph.allTasks.any { it.project == productProject && it.name.toLowerCase(Locale.ROOT).contains('release') }) {
+        if (!hasCompleteSigning) throw new GradleException(signingError)
+        if (releaseCount == null) throw new GradleException('Android release requires explicit -PstorageCommitCount=N (1..65534) from committed Git history')
+        if (productProject.providers.gradleProperty('allowMissingNative').isPresent()) throw new GradleException('Android release cannot use allowMissingNative')
+    }
+}

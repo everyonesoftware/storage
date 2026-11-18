@@ -1,0 +1,43 @@
+PASS runtime XAML typed named-control lookups match shell
+PASS runtime XAML does not require generated code
+PASS bounded frame round trip
+PASS SDK detects corrupted export bytes
+PASS SDK does not silently discard version truncation
+PASS SDK does not silently discard collection truncation
+PASS wrong revision type is a public argument error
+PASS public API rejects sourcePath and actorJson
+PASS unpackaged applications default denied
+PASS unregistered package denied
+PASS same package does not authorize unrelated executable
+PASS bundled packaged Browser allowed by family and executable
+PASS explicit development decision accepts both pinned file hashes
+PASS development managed assembly change invalidates grant
+PASS installed Browser requires approval initially
+PASS denied service consent persists no grant
+PASS explicit service consent saves bundled grant
+PASS approved installed grant survives service restart
+PASS bundled grant denies other caller location
+PASS stale managed assembly hash denies persisted grant
+PASS changed installed bundle requires new approval
+PASS stale executable hash denies persisted grant
+PASS replaced executable requires explicit new consent
+PASS tampered persisted caller location denied
+PASS tampered configuration fails closed
+PASS missing bundled payload fails closed
+PASS host constructs internal staged command
+PASS real pipe rejects internal argument tunneling before core load
+PASS upload readiness handshake
+PASS interrupted upload removes staged bytes before native commit
+PASS native import metadata
+PASS native list through SDK
+PASS native version revision
+PASS immutable version history
+PASS historical export bytes preserved
+PASS independent access policy revision via SDK
+PASS policy edits do not mutate content revision
+PASS collection membership through SDK
+PASS collection removal preserves independent item
+PASS collection deletion does not delete item
+PASS revision conflict crosses IPC
+PASS staging cleaned after transfers
+PASS native repository restart persistence

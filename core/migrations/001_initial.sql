@@ -1,0 +1,8 @@
+-- Schema 1: local first-slice metadata. Runs transactionally during bootstrap.
+CREATE TABLE IF NOT EXISTS identity (key TEXT PRIMARY KEY,value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS policies (id TEXT PRIMARY KEY, owner TEXT NOT NULL, revision INTEGER NOT NULL, readers TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY,name TEXT NOT NULL,content_type TEXT NOT NULL,revision INTEGER NOT NULL,current_version TEXT NOT NULL,policy_id TEXT NOT NULL REFERENCES policies(id),created TEXT NOT NULL,modified TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS versions (id TEXT PRIMARY KEY,item_id TEXT NOT NULL REFERENCES items(id) DEFERRABLE INITIALLY DEFERRED,sha TEXT NOT NULL,bytes INTEGER NOT NULL,created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS audit (id TEXT PRIMARY KEY,policy_id TEXT NOT NULL REFERENCES policies(id),actor TEXT NOT NULL,revision INTEGER NOT NULL,readers TEXT NOT NULL,created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS collections (id TEXT PRIMARY KEY,name TEXT NOT NULL,owner TEXT NOT NULL,revision INTEGER NOT NULL,created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS memberships (collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,item_id TEXT NOT NULL REFERENCES items(id),PRIMARY KEY(collection_id,item_id));

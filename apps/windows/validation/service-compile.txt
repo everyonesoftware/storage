@@ -1,0 +1,11 @@
+  Determining projects to restore...
+  Restored /opt/data/code/storage/apps/windows/Storage.Service/Storage.Service.csproj (in 168 ms).
+  Restored /opt/data/code/storage/apps/windows/Storage.Client/Storage.Client.csproj (in 164 ms).
+  Storage.Client -> /opt/data/code/storage/apps/windows/Storage.Client/bin/Debug/net10.0/Storage.Client.dll
+  Storage.Service -> /opt/data/code/storage/apps/windows/Storage.Service/bin/Debug/net10.0/win-x64/Storage.Service.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:01.03

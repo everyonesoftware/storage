@@ -1,0 +1,12 @@
+/target/
+/artifacts/
+/dist/
+**/bin/
+**/obj/
+**/build/
+**/.gradle/
+**/.kotlin/
+**/local.properties
+*.user
+*.log
+.DS_Store
