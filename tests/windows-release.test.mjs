@@ -93,6 +93,178 @@ test('native uninstall exercises the hook with the approved service still runnin
  assert.match(source, /Expected one healthy task-owned service before uninstall/);
 });
 
+test('consent capability routing uses the real helper and fails closed on provider/action errors', () => {
+ const result=ps(`
+ $ErrorActionPreference='Stop'; Set-StrictMode -Version Latest
+ $tokens=$null; $errors=$null
+ $ast=[Management.Automation.Language.Parser]::ParseFile('./scripts/test-windows-installer.ps1',[ref]$tokens,[ref]$errors)
+ $function=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Invoke-OwnedConsentButton'},$true)
+ if(-not $function){throw 'Missing capability-aware consent activation helper'}
+ Invoke-Expression $function.Extent.Text
+ # Mock only unavailable OS/UI capabilities; execute the actual routing helper.
+ Add-Type 'namespace Windows.Automation { public class InvokePattern { public static object Pattern = new object(); } }'
+ $script:events=[Collections.Generic.List[string]]::new()
+ function Assert-OwnedConsentTarget { $script:events.Add('validate'); if($script:invalid){throw 'invalid target'} }
+ function Get-LegacyConsentPattern { $script:events.Add('legacy-query'); if($script:legacyQueryError){throw 'legacy query failed'}; return $script:legacy }
+ $pattern=[pscustomobject]@{}
+ $pattern | Add-Member ScriptMethod Invoke { $script:events.Add('invoke'); if($script:actionError){throw 'action failed'} }
+ $legacyPattern=[pscustomobject]@{}
+ $legacyPattern | Add-Member ScriptMethod Dispose { }
+ $legacyPattern | Add-Member ScriptMethod DoDefaultAction { $script:events.Add('legacy-action'); if($script:actionError){throw 'action failed'} }
+ $yes=[pscustomobject]@{Current=[pscustomobject]@{NativeWindowHandle=123}}
+ $yes | Add-Member ScriptMethod TryGetCurrentPattern { param($id,$output); $script:events.Add('invoke-query'); if($script:queryError){throw 'provider failed'}; $output.Value=$script:invoke; return $null -ne $script:invoke }
+ function Run-Case($expected,$message='') {
+  $script:events.Clear(); $caught=''; $route=''
+  try {$route=Invoke-OwnedConsentButton 'dialog' $yes 'no' 42} catch {$caught=$_.ToString()}
+  if($message) {if($caught -notlike ('*'+$message+'*')){throw ('Wrong failure: '+$caught)}} elseif($caught -or $route -ne $expected){throw ('Wrong route/failure: '+$route+' '+$caught)}
+  return ($script:events -join ',')
+ }
+ $script:invalid=$false; $script:queryError=$false; $script:legacyQueryError=$false; $script:actionError=$false
+ $script:invoke=$pattern; $script:legacy=$legacyPattern
+ if((Run-Case 'InvokePattern') -ne 'validate,invoke-query,validate,invoke'){throw 'Invoke priority/revalidation'}
+ $script:invoke=$null
+ if((Run-Case 'LegacyIAccessible') -ne 'validate,invoke-query,legacy-query,validate,legacy-action'){throw 'Unsupported Invoke must use Legacy default action'}
+ $script:legacy=$null
+ if((Run-Case '' 'No supported consent button action') -ne 'validate,invoke-query,legacy-query'){throw 'Unsupported target must not activate'}
+ $script:invalid=$true
+ if((Run-Case '' 'invalid target') -ne 'validate'){throw 'Invalid target queried/activated'}
+ $script:invalid=$false; $script:queryError=$true
+ if((Run-Case '' 'provider failed') -ne 'validate,invoke-query'){throw 'Provider errors must not fall back'}
+ $script:queryError=$false; $script:legacyQueryError=$true
+ if((Run-Case '' 'legacy query failed') -ne 'validate,invoke-query,legacy-query'){throw 'Legacy errors must fail closed'}
+ $script:legacyQueryError=$false; $script:invoke=$pattern; $script:actionError=$true
+ if((Run-Case '' 'action failed') -ne 'validate,invoke-query,validate,invoke'){throw 'Failed Invoke must not cause duplicate activation'}
+ $script:invoke=$null; $script:legacy=$legacyPattern
+ if((Run-Case '' 'action failed') -ne 'validate,invoke-query,legacy-query,validate,legacy-action'){throw 'Failed Legacy must fail closed'}
+ Write-Output 'CONSENT_ROUTING_PASSED'
+ `);
+ assert.equal(result.status,0,result.stdout+result.stderr);
+ assert.match(result.stdout,/CONSENT_ROUTING_PASSED/);
+});
+
+test('consent ownership rejects mismatched, disabled and non-button targets before activation', () => {
+ const result=ps(`
+ $ErrorActionPreference='Stop'; Set-StrictMode -Version Latest
+ $tokens=$null; $errors=$null
+ $ast=[Management.Automation.Language.Parser]::ParseFile('./scripts/test-windows-installer.ps1',[ref]$tokens,[ref]$errors)
+ $function=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Assert-OwnedConsentTarget'},$true)
+ if(-not $function){throw 'Missing ownership validation helper'}
+ Invoke-Expression $function.Extent.Text
+ $serviceExe='C:/isolated/current/Service/Storage.Service.exe'; $appExe='C:/isolated/current/Storage.Browser.exe'
+ function Get-OwnedProcesses { [pscustomobject]@{ProcessId=42;ExecutablePath=$script:actualPath} }
+ function Get-ConsentBrowserText { $script:browserText }
+ function Get-ConsentWindowFacts($Window) { $script:facts[$Window.Current.NativeWindowHandle] }
+ $dialog=[pscustomobject]@{Current=[pscustomobject]@{ProcessId=42;Name='Storage Service — Browser approval';NativeWindowHandle=100}}
+ $yes=[pscustomobject]@{Current=[pscustomobject]@{ProcessId=42;AutomationId='6';IsEnabled=$true;ControlType=[pscustomobject]@{ProgrammaticName='ControlType.Button'};NativeWindowHandle=101}}
+ $no=[pscustomobject]@{Current=[pscustomobject]@{ProcessId=42;AutomationId='7';IsEnabled=$true;ControlType=[pscustomobject]@{ProgrammaticName='ControlType.Button'};NativeWindowHandle=102}}
+ $script:actualPath=$serviceExe; $script:browserText='Approve '+$appExe+'?'
+ $script:facts=@{
+  100=@{Handle=100;Exists=$true;ProcessId=42;Parent=0;ClassName='#32770';ControlId=0;Enabled=$true;Visible=$true;Title='Storage Service — Browser approval'}
+  101=@{Handle=101;Exists=$true;ProcessId=42;Parent=100;ClassName='Button';ControlId=6;Enabled=$true;Visible=$true;Title='Yes'}
+  102=@{Handle=102;Exists=$true;ProcessId=42;Parent=100;ClassName='Button';ControlId=7;Enabled=$true;Visible=$true;Title='No'}
+ }
+ Assert-OwnedConsentTarget $dialog $yes $no 42
+ function Must-Reject([scriptblock]$change,[scriptblock]$restore) {
+  & $change; $rejected=$false
+  try {Assert-OwnedConsentTarget $dialog $yes $no 42} catch {$rejected=$true} finally {& $restore}
+  if(-not $rejected){throw ('Accepted unsafe target: '+$change)}
+ }
+ Must-Reject {$script:actualPath='C:/other/Storage.Service.exe'} {$script:actualPath=$serviceExe}
+ Must-Reject {$script:browserText='C:/other/Storage.Browser.exe'} {$script:browserText=$appExe}
+ Must-Reject {$dialog.Current.ProcessId=99} {$dialog.Current.ProcessId=42}
+ Must-Reject {$dialog.Current.Name='Other approval'} {$dialog.Current.Name='Storage Service — Browser approval'}
+ foreach($button in @($yes,$no)) {
+  Must-Reject {$button.Current.ProcessId=99} {$button.Current.ProcessId=42}
+  $id=$button.Current.AutomationId
+  Must-Reject {$button.Current.AutomationId='8'} {$button.Current.AutomationId=$id}
+  Must-Reject {$button.Current.IsEnabled=$false} {$button.Current.IsEnabled=$true}
+  Must-Reject {$button.Current.ControlType.ProgrammaticName='ControlType.Text'} {$button.Current.ControlType.ProgrammaticName='ControlType.Button'}
+  Must-Reject {$button.Current.NativeWindowHandle=0} {$button.Current.NativeWindowHandle=100+[int]$id-5}
+ }
+ foreach($handle in @(100,101,102)) {
+  $fact=$script:facts[$handle]
+  foreach($key in @('Exists','Enabled','Visible')) {Must-Reject {$fact[$key]=$false} {$fact[$key]=$true}}
+  Must-Reject {$fact.ProcessId=99} {$fact.ProcessId=42}
+  $class=$fact.ClassName
+  Must-Reject {$fact.ClassName='NotAButtonOrDialog'} {$fact.ClassName=$class}
+  Must-Reject {$fact.Handle=999} {$fact.Handle=$handle}
+  if($handle -ne 100) {
+   $controlId=$fact.ControlId
+   Must-Reject {$fact.ControlId=8} {$fact.ControlId=$controlId}
+   Must-Reject {$fact.Parent=999} {$fact.Parent=100}
+  }
+ }
+ Must-Reject {$script:facts[100].Title='Different dialog'} {$script:facts[100].Title='Storage Service — Browser approval'}
+ Write-Output 'CONSENT_OWNERSHIP_PASSED'
+ `);
+ assert.equal(result.status,0,result.stdout+result.stderr);
+ assert.match(result.stdout,/CONSENT_OWNERSHIP_PASSED/);
+});
+
+test('consent completion does not read a destroyed dialog after the button closes it', () => {
+ const result=ps(`
+ $ErrorActionPreference='Stop'; Set-StrictMode -Version Latest
+ $tokens=$null; $errors=$null
+ $ast=[Management.Automation.Language.Parser]::ParseFile('./scripts/test-windows-installer.ps1',[ref]$tokens,[ref]$errors)
+ $function=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Approve-OwnedService'},$true)
+ Invoke-Expression $function.Extent.Text
+ Add-Type 'namespace Windows.Automation { public enum TreeScope { Descendants } public class AutomationElement { public static object AutomationIdProperty=new object(); } public class PropertyCondition { public string Id; public PropertyCondition(object p,string id) {Id=id;} } }'
+ $serviceExe='isolated/service.exe'; $appExe='isolated/browser.exe'; $summary=@{consentVerified=$false}
+ $script:closed=$false; $script:duplicate=$false; $script:evidence=@{}
+ $script:dialogCurrent=[pscustomobject]@{Name='Storage Service — Browser approval';NativeWindowHandle=100}
+ $script:dialog=[pscustomobject]@{}
+ $script:dialog | Add-Member ScriptProperty Current {if($script:closed){throw 'ElementNotAvailable: dialog already closed'}; $script:dialogCurrent}
+ $script:dialog | Add-Member ScriptMethod FindAll {param($scope,$condition); if($script:duplicate){return @('duplicate','duplicate')}; return $condition.Id}
+ function Get-OwnedProcesses { [pscustomobject]@{ProcessId=42;ExecutablePath=$serviceExe} }
+ function Get-Elements { if(-not $script:closed){$script:dialog} }
+ function Assert-OwnedConsentTarget { }
+ function Invoke-OwnedConsentButton { $script:closed=$true; 'LegacyIAccessible' }
+ function Write-Evidence($Value,$Name) { $script:evidence[$Name]=$Value }
+ Approve-OwnedService
+ if(-not $summary.consentVerified -or $script:evidence['consent-action.json'].action -ne 'LegacyIAccessible'){throw 'Consent completion evidence missing'}
+ $script:closed=$false; $script:duplicate=$true; $rejected=$false
+ try {Approve-OwnedService} catch {if($_ -notlike '*unique*'){throw}; $rejected=$true}
+ if(-not $rejected -or $script:closed){throw 'Duplicate controls must not activate'}
+ Write-Output 'CONSENT_COMPLETION_PASSED'
+ `);
+ assert.equal(result.status,0,result.stdout+result.stderr);
+ assert.match(result.stdout,/CONSENT_COMPLETION_PASSED/);
+});
+
+test('native consent interop compiles and gate uses only validated real UI actions', () => {
+ const source=read('scripts/test-windows-installer.ps1');
+ assert.doesNotMatch(source,/\$yes\.GetCurrentPattern/);
+ assert.match(source,/Invoke-OwnedConsentButton \$dialog \$yes \$no/);
+ assert.match(source,/LegacyIAccessible/);
+ assert.match(source,/consent-action\.json/);
+ assert.match(source,/Consent dialog did not close/);
+ const result=ps(`
+ $ErrorActionPreference='Stop'; $tokens=$null; $errors=$null
+ $ast=[Management.Automation.Language.Parser]::ParseFile('./scripts/test-windows-installer.ps1',[ref]$tokens,[ref]$errors)
+ $literal=$ast.Find({param($n) $n -is [Management.Automation.Language.StringConstantExpressionAst] -and $n.Value.StartsWith('using System;')},$true)
+ Add-Type -TypeDefinition $literal.Value
+ if(-not ('StorageSmoke.LegacyAction' -as [type])){throw 'Native Legacy interop missing'}
+ $rejected=$false
+ try {[StorageSmoke.LegacyAction]::FromHandle([IntPtr]::Zero)} catch {if($_ -notlike '*Missing consent button HWND*'){throw}; $rejected=$true}
+ if(-not $rejected){throw 'Zero HWND must fail before COM activation'}
+ # Verify the COM ABI prefixes against the Windows SDK declaration order.
+ $assembly=[StorageSmoke.LegacyAction].Assembly
+ foreach($entry in @(
+  @{name='IUIAutomation';guid='30cbe57d-d9d0-452a-ab13-7ac5ac4825ee';last='ElementFromHandle';count=4},
+  @{name='IUIAutomationElement';guid='d22108aa-8ac5-49a5-837b-37bbb3d7591e';last='GetCurrentPattern';count=14},
+  @{name='IUIAutomationLegacyIAccessiblePattern';guid='828055ad-355b-4435-86d5-3b51c14a9b1b';last='DoDefaultAction';count=2}
+ )) {
+  $type=$assembly.GetType('StorageSmoke.'+$entry.name)
+  $methods=@($type.GetMethods() | Sort-Object MetadataToken)
+  if($type.GUID.ToString() -ne $entry.guid -or $methods.Count -ne $entry.count -or $methods[-1].Name -ne $entry.last){throw ('Incorrect COM ABI prefix: '+$entry.name)}
+ }
+ # Compile only: never pretend that Linux provides COM, HWNDs or a Windows desktop.
+ Write-Output 'CONSENT_INTEROP_COMPILED'
+ `);
+ assert.equal(result.status,0,result.stdout+result.stderr);
+ assert.match(result.stdout,/CONSENT_INTEROP_COMPILED/);
+});
+
 test('UI Automation uses the matching PowerShell runtime assemblies before installation', () => {
  const source = read('scripts/test-windows-installer.ps1');
  assert.doesNotMatch(source, /Framework64\/v4\.0\.30319/);

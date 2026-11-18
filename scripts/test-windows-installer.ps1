@@ -58,16 +58,67 @@ function Get-Elements([int]$ProcessId, [string]$Title) {
         [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::NameProperty,$Title))
     [Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Children,$condition)
 }
+function Get-ConsentBrowserText($Dialog) {
+    $Dialog.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition) | ForEach-Object { $_.Current.Name }
+}
+function Get-ConsentWindowFacts($Window) {
+    [StorageSmoke.Native]::ReadConsentWindow([IntPtr]::new($Window.Current.NativeWindowHandle))
+}
+function Assert-OwnedConsentTarget($Dialog, $Yes, $No, [int]$ServiceProcessId) {
+    $owned=@(Get-OwnedProcesses | Where-Object { $_.ProcessId -eq $ServiceProcessId -and $_.ExecutablePath -ieq $serviceExe })
+    if ($owned.Count -ne 1) { throw 'Consent service PID/path no longer belongs to this installation' }
+    $title='Storage Service — Browser approval'
+    if ($Dialog.Current.ProcessId -ne $ServiceProcessId -or $Dialog.Current.Name -cne $title) { throw 'Unexpected consent dialog owner/title' }
+    if (-not @(Get-ConsentBrowserText $Dialog | Where-Object { $_.Contains($appExe) }).Count) { throw 'Service consent is not for this exact installed Browser' }
+    $dialogWindow=Get-ConsentWindowFacts $Dialog
+    if (-not $Dialog.Current.NativeWindowHandle -or -not $dialogWindow.Exists -or $dialogWindow.Handle -ne $Dialog.Current.NativeWindowHandle -or $dialogWindow.ProcessId -ne $ServiceProcessId -or $dialogWindow.ClassName -cne '#32770' -or $dialogWindow.Title -cne $title -or -not $dialogWindow.Enabled -or -not $dialogWindow.Visible) { throw 'Invalid native service consent dialog' }
+    foreach ($entry in @(@{button=$Yes;id=6},@{button=$No;id=7})) {
+        $button=$entry.button; $id=$entry.id
+        if (-not $button -or $button.Current.ProcessId -ne $ServiceProcessId -or $button.Current.AutomationId -cne [string]$id -or $button.Current.ControlType.ProgrammaticName -cne 'ControlType.Button' -or -not $button.Current.IsEnabled -or -not $button.Current.NativeWindowHandle) { throw 'Invalid service-owned Yes/No UIA button' }
+        $native=Get-ConsentWindowFacts $button
+        if (-not $native.Exists -or $native.Handle -ne $button.Current.NativeWindowHandle -or $native.ProcessId -ne $ServiceProcessId -or $native.Parent -ne $dialogWindow.Handle -or $native.ClassName -cne 'Button' -or $native.ControlId -ne $id -or -not $native.Enabled -or -not $native.Visible) { throw 'Invalid native service-owned Yes/No button' }
+    }
+}
+function Get-LegacyConsentPattern($Button) {
+    # LegacyIAccessible is a native UIA pattern, not a managed InvokePattern.
+    [StorageSmoke.LegacyAction]::FromHandle([IntPtr]::new($Button.Current.NativeWindowHandle))
+}
+function Invoke-OwnedConsentButton($Dialog, $Yes, $No, [int]$ServiceProcessId) {
+    Assert-OwnedConsentTarget $Dialog $Yes $No $ServiceProcessId
+    $pattern=$null
+    # https://learn.microsoft.com/dotnet/api/system.windows.automation.automationelement.trygetcurrentpattern
+    if ($Yes.TryGetCurrentPattern([Windows.Automation.InvokePattern]::Pattern,[ref]$pattern)) {
+        Assert-OwnedConsentTarget $Dialog $Yes $No $ServiceProcessId
+        $pattern.Invoke()
+        return 'InvokePattern'
+    }
+    # Only unsupported capability falls back. Stale elements, provider failures
+    # and action errors propagate: never risk a second activation after a failure.
+    $legacy=Get-LegacyConsentPattern $Yes
+    if ($null -eq $legacy) { throw 'No supported consent button action (InvokePattern/LegacyIAccessible)' }
+    try {
+        Assert-OwnedConsentTarget $Dialog $Yes $No $ServiceProcessId
+        $legacy.DoDefaultAction()
+        return 'LegacyIAccessible'
+    } finally { $legacy.Dispose() }
+}
 function Approve-OwnedService {
     foreach ($owned in @(Get-OwnedProcesses | Where-Object { $_.ExecutablePath -ieq $serviceExe })) {
         foreach ($dialog in @(Get-Elements ([int]$owned.ProcessId) 'Storage Service — Browser approval')) {
-            $text=$dialog.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.Condition]::TrueCondition)
-            if (-not @($text | Where-Object { $_.Current.Name.Contains($appExe) }).Count) { throw 'Service consent is not for this exact installed Browser' }
-            $yes=$dialog.FindFirst([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty,'6'))
-            $no=$dialog.FindFirst([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty,'7'))
-            if (-not $yes -or -not $no) { throw 'Expected service-owned Yes/No consent controls missing' }
+            $yesControls=@($dialog.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty,'6')))
+            $noControls=@($dialog.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty,'7')))
+            if ($yesControls.Count -ne 1 -or $noControls.Count -ne 1) { throw 'Expected unique service-owned Yes/No consent controls' }
+            $yes=$yesControls[0]; $no=$noControls[0]
+            Assert-OwnedConsentTarget $dialog $yes $no ([int]$owned.ProcessId)
             Write-Evidence @{ servicePid=$owned.ProcessId; servicePath=$owned.ExecutablePath; browser=$appExe; dialog=$dialog.Current.Name } 'consent.json'
-            ([Windows.Automation.InvokePattern]$yes.GetCurrentPattern([Windows.Automation.InvokePattern]::Pattern)).Invoke()
+            $dialogHandle=$dialog.Current.NativeWindowHandle
+            $action=Invoke-OwnedConsentButton $dialog $yes $no ([int]$owned.ProcessId)
+            Write-Evidence @{ action=$action; servicePid=$owned.ProcessId; dialogHwnd=$dialogHandle } 'consent-action.json'
+            $consentDeadline=[DateTime]::UtcNow.AddSeconds(5)
+            while (@(Get-Elements ([int]$owned.ProcessId) 'Storage Service — Browser approval').Count) {
+                if ([DateTime]::UtcNow -ge $consentDeadline) { throw 'Consent dialog did not close after real button activation' }
+                Start-Sleep -Milliseconds 100
+            }
             $summary.consentVerified=$true
         }
     }
@@ -111,6 +162,75 @@ try {
 using System;
 using System.Runtime.InteropServices;
 namespace StorageSmoke {
+ // Native UIA COM prefixes in Windows SDK UIAutomationClient.h vtable order.
+ // Only ElementFromHandle, GetCurrentPattern and DoDefaultAction are called.
+ // https://learn.microsoft.com/windows/win32/api/uiautomationclient/nn-uiautomationclient-iuiautomationlegacyiaccessiblepattern
+ [ComImport, Guid("30cbe57d-d9d0-452a-ab13-7ac5ac4825ee"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+ internal interface IUIAutomation {
+  void CompareElements(IntPtr a,IntPtr b,out int same);
+  void CompareRuntimeIds(IntPtr a,IntPtr b,out int same);
+  void GetRootElement(out IntPtr root);
+  void ElementFromHandle(IntPtr hwnd,out IUIAutomationElement element);
+ }
+ [ComImport, Guid("d22108aa-8ac5-49a5-837b-37bbb3d7591e"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+ internal interface IUIAutomationElement {
+  void SetFocus();
+  void GetRuntimeId(out IntPtr id);
+  void FindFirst(int scope,IntPtr condition,out IntPtr found);
+  void FindAll(int scope,IntPtr condition,out IntPtr found);
+  void FindFirstBuildCache(int scope,IntPtr condition,IntPtr cache,out IntPtr found);
+  void FindAllBuildCache(int scope,IntPtr condition,IntPtr cache,out IntPtr found);
+  void BuildUpdatedCache(IntPtr cache,out IntPtr element);
+  void GetCurrentPropertyValue(int id,IntPtr value);
+  void GetCurrentPropertyValueEx(int id,int ignoreDefault,IntPtr value);
+  void GetCachedPropertyValue(int id,IntPtr value);
+  void GetCachedPropertyValueEx(int id,int ignoreDefault,IntPtr value);
+  void GetCurrentPatternAs(int id,ref Guid iid,out IntPtr pattern);
+  void GetCachedPatternAs(int id,ref Guid iid,out IntPtr pattern);
+  [PreserveSig] int GetCurrentPattern(int id,[MarshalAs(UnmanagedType.IUnknown)] out object pattern);
+ }
+ [ComImport, Guid("828055ad-355b-4435-86d5-3b51c14a9b1b"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+ internal interface IUIAutomationLegacyIAccessiblePattern {
+  void Select(int flags);
+  void DoDefaultAction();
+ }
+ public sealed class LegacyAction : IDisposable {
+  private IUIAutomationLegacyIAccessiblePattern pattern;
+  private LegacyAction(IUIAutomationLegacyIAccessiblePattern value) { pattern=value; }
+  public static LegacyAction FromHandle(IntPtr hwnd) {
+   if(hwnd==IntPtr.Zero) throw new InvalidOperationException("Missing consent button HWND");
+   IUIAutomation automation=null; IUIAutomationElement element=null; object value=null;
+   try {
+    automation=(IUIAutomation)Activator.CreateInstance(Type.GetTypeFromCLSID(new Guid("ff48dba4-60ef-4201-aa87-54103eef594e"),true));
+    automation.ElementFromHandle(hwnd,out element);
+    // UIA_LegacyIAccessiblePatternId; no action if capability is absent.
+    // https://learn.microsoft.com/windows/win32/api/uiautomationclient/nf-uiautomationclient-iuiautomationelement-getcurrentpattern
+    int hr=element.GetCurrentPattern(10018,out value);
+    if(hr==unchecked((int)0x80040204)) return null; // UIA_E_NOTSUPPORTED
+    Marshal.ThrowExceptionForHR(hr);
+    if(value==null) return null;
+    var action=new LegacyAction((IUIAutomationLegacyIAccessiblePattern)value);
+    value=null; // wrapper owns this RCW until Dispose
+    return action;
+   } finally {
+    if(value!=null) Marshal.ReleaseComObject(value);
+    if(element!=null) Marshal.ReleaseComObject(element);
+    if(automation!=null) Marshal.ReleaseComObject(automation);
+   }
+  }
+  public void DoDefaultAction() {
+   if(pattern==null) throw new ObjectDisposedException(nameof(LegacyAction));
+   pattern.DoDefaultAction();
+  }
+  public void Dispose() { if(pattern!=null) { Marshal.ReleaseComObject(pattern); pattern=null; } }
+ }
+ public sealed class ConsentWindow {
+  public long Handle,Parent;
+  public uint ProcessId;
+  public int ControlId;
+  public bool Exists,Enabled,Visible;
+  public string ClassName,Title;
+ }
  public static class Native {
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left,Top,Right,Bottom; }
   [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h,int a,out RECT r,int n);
@@ -123,6 +243,20 @@ namespace StorageSmoke {
   [DllImport("user32.dll")] public static extern IntPtr OpenInputDesktop(uint f,bool i,uint a);
   [DllImport("user32.dll")] public static extern bool SwitchDesktop(IntPtr d);
   [DllImport("user32.dll")] public static extern bool CloseDesktop(IntPtr d);
+  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
+  [DllImport("user32.dll")] private static extern bool IsWindowEnabled(IntPtr h);
+  [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr h,out uint pid);
+  [DllImport("user32.dll")] private static extern IntPtr GetParent(IntPtr h);
+  [DllImport("user32.dll")] private static extern int GetDlgCtrlID(IntPtr h);
+  [DllImport("user32.dll",CharSet=CharSet.Unicode)] private static extern int GetClassName(IntPtr h,System.Text.StringBuilder text,int count);
+  [DllImport("user32.dll",CharSet=CharSet.Unicode)] private static extern int GetWindowText(IntPtr h,System.Text.StringBuilder text,int count);
+  public static ConsentWindow ReadConsentWindow(IntPtr h) {
+   uint pid; GetWindowThreadProcessId(h,out pid);
+   var cls=new System.Text.StringBuilder(256); var title=new System.Text.StringBuilder(512);
+   GetClassName(h,cls,cls.Capacity); GetWindowText(h,title,title.Capacity);
+   return new ConsentWindow {Handle=h.ToInt64(),Parent=GetParent(h).ToInt64(),ProcessId=pid,ControlId=GetDlgCtrlID(h),Exists=IsWindow(h),Enabled=IsWindowEnabled(h),Visible=IsWindowVisible(h),ClassName=cls.ToString(),Title=title.ToString()};
+  }
   public static bool Responsive(IntPtr h) { UIntPtr r; return SendMessageTimeout(h,0,UIntPtr.Zero,IntPtr.Zero,2,1000,out r)!=IntPtr.Zero; }
  }
 }
