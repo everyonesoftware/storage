@@ -201,6 +201,34 @@ test('consent ownership rejects mismatched, disabled and non-button targets befo
  assert.match(result.stdout,/CONSENT_OWNERSHIP_PASSED/);
 });
 
+test('consent rejection retains target properties before ownership validation fails', () => {
+ const result=ps(`
+ $ErrorActionPreference='Stop'; Set-StrictMode -Version Latest
+ $tokens=$null; $errors=$null
+ $ast=[Management.Automation.Language.Parser]::ParseFile('./scripts/test-windows-installer.ps1',[ref]$tokens,[ref]$errors)
+ $function=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Approve-OwnedService'},$true)
+ Invoke-Expression $function.Extent.Text
+ Add-Type 'namespace Windows.Automation { public enum TreeScope { Descendants } public class AutomationElement { public static object AutomationIdProperty=new object(); } public class PropertyCondition { public string Id; public PropertyCondition(object p,string id) {Id=id;} } }'
+ $serviceExe='isolated/service.exe'; $appExe='isolated/browser.exe'; $script:evidence=@{}
+ $dialog=[pscustomobject]@{}
+ $dialog | Add-Member ScriptMethod FindAll {param($scope,$condition); return $condition.Id}
+ function Get-OwnedProcesses { [pscustomobject]@{ProcessId=42;ExecutablePath=$serviceExe} }
+ function Get-Elements { $dialog }
+ function Get-ConsentElementEvidence($Element) { @{observed=$Element} }
+ function Write-Evidence($Value,$Name) { $script:evidence[$Name]=$Value }
+ function Assert-OwnedConsentTarget { throw 'Invalid service-owned Yes/No UIA button' }
+ function Invoke-OwnedConsentButton { throw 'Invalid target must not activate' }
+ $caught=''; try {Approve-OwnedService} catch {$caught=$_.ToString()}
+ if($caught -notlike '*Invalid service-owned*'){throw ('Wrong failure: '+$caught)}
+ if(-not $script:evidence.ContainsKey('consent-targets.json')){throw 'Missing target evidence before rejection'}
+ $snapshot=$script:evidence['consent-targets.json']
+ if($snapshot.servicePid -ne 42 -or $snapshot.yes.observed -ne '6' -or $snapshot.no.observed -ne '7'){throw 'Incorrect pre-validation evidence'}
+ Write-Output 'CONSENT_REJECTION_EVIDENCE_PASSED'
+ `);
+ assert.equal(result.status,0,result.stdout+result.stderr);
+ assert.match(result.stdout,/CONSENT_REJECTION_EVIDENCE_PASSED/);
+});
+
 test('consent completion does not read a destroyed dialog after the button closes it', () => {
  const result=ps(`
  $ErrorActionPreference='Stop'; Set-StrictMode -Version Latest
@@ -218,6 +246,7 @@ test('consent completion does not read a destroyed dialog after the button close
  function Get-OwnedProcesses { [pscustomobject]@{ProcessId=42;ExecutablePath=$serviceExe} }
  function Get-Elements { if(-not $script:closed){$script:dialog} }
  function Assert-OwnedConsentTarget { }
+ function Get-ConsentElementEvidence($Element) { @{observed=$Element} }
  function Invoke-OwnedConsentButton { $script:closed=$true; 'LegacyIAccessible' }
  function Write-Evidence($Value,$Name) { $script:evidence[$Name]=$Value }
  Approve-OwnedService

@@ -64,6 +64,14 @@ function Get-ConsentBrowserText($Dialog) {
 function Get-ConsentWindowFacts($Window) {
     [StorageSmoke.Native]::ReadConsentWindow([IntPtr]::new($Window.Current.NativeWindowHandle))
 }
+function Get-ConsentElementEvidence($Element) {
+    $current=$Element.Current
+    [ordered]@{
+        processId=$current.ProcessId; automationId=$current.AutomationId; name=$current.Name
+        controlType=$current.ControlType.ProgrammaticName; enabled=$current.IsEnabled
+        nativeWindowHandle=$current.NativeWindowHandle; native=(Get-ConsentWindowFacts $Element)
+    }
+}
 function Assert-OwnedConsentTarget($Dialog, $Yes, $No, [int]$ServiceProcessId) {
     $owned=@(Get-OwnedProcesses | Where-Object { $_.ProcessId -eq $ServiceProcessId -and $_.ExecutablePath -ieq $serviceExe })
     if ($owned.Count -ne 1) { throw 'Consent service PID/path no longer belongs to this installation' }
@@ -109,6 +117,7 @@ function Approve-OwnedService {
             $noControls=@($dialog.FindAll([Windows.Automation.TreeScope]::Descendants,[Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::AutomationIdProperty,'7')))
             if ($yesControls.Count -ne 1 -or $noControls.Count -ne 1) { throw 'Expected unique service-owned Yes/No consent controls' }
             $yes=$yesControls[0]; $no=$noControls[0]
+            Write-Evidence @{ servicePid=$owned.ProcessId; servicePath=$owned.ExecutablePath; browser=$appExe; dialog=(Get-ConsentElementEvidence $dialog); yes=(Get-ConsentElementEvidence $yes); no=(Get-ConsentElementEvidence $no) } 'consent-targets.json'
             Assert-OwnedConsentTarget $dialog $yes $no ([int]$owned.ProcessId)
             Write-Evidence @{ servicePid=$owned.ProcessId; servicePath=$owned.ExecutablePath; browser=$appExe; dialog=$dialog.Current.Name } 'consent.json'
             $dialogHandle=$dialog.Current.NativeWindowHandle
