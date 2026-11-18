@@ -8,7 +8,7 @@ if ($LASTEXITCODE -ne 0) { throw "WinUI publish failed." }
 & $Dotnet publish (Join-Path $PSScriptRoot "Storage.Service/Storage.Service.csproj") -c Release -r win-x64 --self-contained true -o (Join-Path $out "Service")
 if ($LASTEXITCODE -ne 0) { throw "Service publish failed." }
 Copy-Item $NativeDll (Join-Path $out "Service/storage_core.dll") -Force
-foreach ($file in @("Storage.Browser.exe", "Storage.Browser.dll", "resources.pri", "Service/Storage.Service.exe", "Service/storage_core.dll")) {
+foreach ($file in @("Storage.Browser.exe", "Storage.Browser.dll", "resources.pri", "Service/Storage.Service.exe", "Service/Assets/Storage.ico", "Service/storage_core.dll")) {
     if (-not (Test-Path (Join-Path $out $file))) { throw "Incomplete deployment: $file" }
 }
 Write-Host "Unpackaged development deployment: $out"

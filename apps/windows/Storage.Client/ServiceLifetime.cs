@@ -6,6 +6,17 @@ namespace Storage.Client;
 [SupportedOSPlatform("windows")]
 public static class ServiceLifetime
 {
+    // Presence is NOT health: a stopped/starting tray host still owns this mutex.
+    public static bool IsHostPresent()
+    {
+        try
+        {
+            if (!Mutex.TryOpenExisting("Local\\" + WindowsPeers.PipeName.Replace('\\', '.'), out var host)) return false;
+            host.Dispose();
+            return true;
+        }
+        catch (UnauthorizedAccessException) { return true; } // Inaccessible is not proof of absence.
+    }
     public static string StopEventName(string executable) => "Local\\Storage.Stop." + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(executable).ToUpperInvariant())));
     // Same-user shutdown only; never grants repository access or accepts wire commands.
     public static void StopBundled(string executable)

@@ -52,7 +52,7 @@ jobs:
           mkdir -p "$TMPDIR"
           node scripts/lint-workflow.mjs --actionlint "$RUNNER_TEMP/actionlint/actionlint"
       - name: Test release selection, manifests, publication and workflow guards
-        run: node --test tests/release.test.mjs tests/current-downloads.test.mjs tests/ci-workflow.test.mjs tests/android-release.test.mjs tests/windows-release.test.mjs tests/android-updates.test.mjs tests/android-update-finalization.test.mjs tests/windows-updates.test.mjs
+        run: node --test tests/release.test.mjs tests/current-downloads.test.mjs tests/ci-workflow.test.mjs tests/android-release.test.mjs tests/windows-release.test.mjs tests/android-updates.test.mjs tests/android-update-finalization.test.mjs tests/windows-updates.test.mjs tests/windows-tray.test.mjs
       - name: Select changed platforms from verified publications
         id: select
         env:

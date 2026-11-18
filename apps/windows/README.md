@@ -3,7 +3,7 @@
 ## What is here
 
 - `Storage.Client`: logical C# SDK, bounded JSON metadata frames and streamed bytes; no Rust/repository dependency. Callers provide streams, logical IDs and revision preconditions, never repository/source paths or actor JSON.
-- `Storage.Service`: independently runnable per-user Windows console host. Owns `%LOCALAPPDATA%\Everyonesoftware\Storage\repository`, calls the **actual** `storage_execute(root, trustedActorJson, commandJson)` / `storage_free` ABI, and stages uploads privately. The root and fixed local-owner actor are constructed here, not accepted over IPC.
+- `Storage.Service`: independently runnable per-user Windows background/tray host, without a console or taskbar window. Owns `%LOCALAPPDATA%\Everyonesoftware\Storage\repository`, calls the **actual** `storage_execute(root, trustedActorJson, commandJson)` / `storage_free` ABI, and stages uploads privately. The root and fixed local-owner actor are constructed here, not accepted over IPC.
 - `Storage.Browser`: native WinUI 3, runtime-loaded embedded XAML, Music-style native drag title area and caption buttons. Neutral slate + blue/teal product styling. File picker and drag/drop import, local search, grid/list, generated attributes, item/policy revisions, properties, immutable version history, historical/current export, new versions, rename, collection creation/membership and bounded UTF-8 text preview (text/*, at most 64 KiB). All displayed items and counts come from the service. Settings has a user-initiated Velopack update flow: check, download with progress, then explicit restart/install. It displays the real assembly informational version and never reports a failed network/integrity check as up-to-date.
 - `Storage.Tests`: dependency-free .NET 10 executable assertions. Linux named-pipe harness uses the same framing, dispatcher, SDK and real native library. It deliberately does **not** exercise or impersonate Windows production identity checks.
 
@@ -24,7 +24,7 @@ The Browser also checks the connection-derived server process path against its d
 
 **Installed first-party consent:** the installed Browser starts its fixed bundled service with `--approve-bundled-browser` on first use. That flag supplies **no executable path or hashes**. The service derives only `../Storage.Browser.exe` from its own `current/Service` installation, shows its own **default-No** Yes/No dialog, and persists the approved exact path plus EXE/DLL SHA-256 under `%LOCALAPPDATA%\Everyonesoftware\Storage\service-config\bundled-browser-grant.json`. This current-user-only ACL directory is separate from repository data and outside the update payload. Denial saves no grant; changed/missing bundle bytes, linked targets or malformed state deny. An upgraded bundle requires new consent. OS-derived caller/peer identity checks still apply; this does not create a third-party or generic same-user allowance. A running locked service must be stopped and restarted with the explicit approval flag; the Browser error explains that approval is required.
 
-**Development enrollment:** `start-development.ps1 -EnrollDevelopmentBrowser` explicitly grants one exact absolute Browser EXE path plus SHA-256 of its EXE and managed DLL for that console service lifetime. Changes require service restart and new explicit enrollment. The Browser cannot enroll itself; installed autostart can request only the service-owned consent dialog, never supply a grant. This is a narrow development allowance, **not** cryptographic isolation of arbitrary full-trust applications. Shared .NET dependencies/runtime and user-owned files remain writable within that OS user's trust boundary. The per-user service, unpackaged grant and repository ACL are not a sandbox against same-user full-trust malware or an administrator; package-identity checks do not change that limitation. No unrestricted “same user = authorized application” fallback exists.
+**Development enrollment:** `start-development.ps1 -EnrollDevelopmentBrowser` explicitly grants one exact absolute Browser EXE path plus SHA-256 of its EXE and managed DLL for that service host lifetime. Changes require service restart and new explicit enrollment. The Browser cannot enroll itself; installed autostart can request only the service-owned consent dialog, never supply a grant. This is a narrow development allowance, **not** cryptographic isolation of arbitrary full-trust applications. Shared .NET dependencies/runtime and user-owned files remain writable within that OS user's trust boundary. The per-user service, unpackaged grant and repository ACL are not a sandbox against same-user full-trust malware or an administrator; package-identity checks do not change that limitation. No unrestricted “same user = authorized application” fallback exists.
 
 Uploads have a ready handshake, stream exact declared lengths into random service-owned `.partial` files, flush, then call core commit. Interrupted or rejected uploads remove staging and never call core commit; startup removes abandoned `.partial` files. Exports expose only version metadata and bytes, not the core-resolved path; the SDK independently verifies exported SHA-256. Browser save-picker exports use a transacted write and commit only after verified complete transfer. Limits: 1 MiB metadata, 1 GiB content, one active service session, five-minute operation/session timeout; core local listing is capped at 500 and truncation is shown. A client may retain already delivered plaintext; there is no claim of recalling exports.
 
@@ -93,7 +93,9 @@ The service can be run independently (without grant arguments it remains locked 
 
 ```powershell
 ./apps/windows/artifacts/Browser/Service/Storage.Service.exe
-# Ctrl+C to stop. Existing service instances are detected per-user.
+# Click the tray icon for Start/Stop, Restart or Quit.
+# Or exit this installation's host gracefully (also used by update/uninstall):
+./apps/windows/artifacts/Browser/Service/Storage.Service.exe --stop
 ```
 
 For manual explicit development enrollment, calculate both real file hashes and use:
@@ -106,6 +108,18 @@ $dll = (Get-FileHash ([IO.Path]::ChangeExtension($browser, '.dll')) -Algorithm S
 ```
 
 ## Installer packaging and CI lifecycle gate
+
+### Background service and tray controls
+
+The native tray popup follows the selected **Status + menu / Header shortcut** design: Storage icon and service state in the header, an icon-only **Open Storage** shortcut at its right, then **Stop service / Start service**, **Restart service**, and **Quit Storage Service**. There is no explanatory footer. Startup does not open a console or popup; left/right tray activation opens the controls. The launcher has an accessible name and tooltip.
+
+- **Stop** cancels active service sessions, waits for the engine to be released, and retains the tray host so **Start** remains available. **Restart** completes that shutdown before reopening the same repository. Transitions reject overlapping lifecycle actions; failures remain visible and retryable rather than reporting a false Running state.
+- **Quit** asks for confirmation, stops the service and removes the icon. The existing installation-scoped `--stop` command and Velopack update/uninstall hooks exit the entire tray host without a confirmation prompt. Neither path deletes repository or approval data.
+- Windows logoff/shutdown requests cancellation and waits up to four seconds for service draining inside the session-ending handler, before returning to Windows. A deadline or cleanup failure does not report a successful drain. Forced OS termination can still interrupt work; native session-end acceptance remains required.
+- The header shortcut opens only the bundled `../Storage.Browser.exe`. A repeated launch activates the existing Browser rather than opening another window. Closing Browser leaves the service running. Launching from the tray does not silently restart a stopped service; start it explicitly from the tray and refresh Browser.
+- First-party consent and pinned development enrollment remain service-owned. Launching Browser is not authorization and never changes a grant. Unpackaged installed bundles still require explicit approval. This is a user-session background app, not a LocalSystem Windows service or a new sign-in-startup registration.
+
+Portable lifecycle/activation tests run through `Storage.Tests`; `tests/windows-tray.test.mjs` protects packaging and CI wiring, including the GUI PE subsystem and required service icon. These tests and a Linux Windows-target compile are not native tray, foreground activation, Explorer-restart, keyboard or high-DPI acceptance. Exercise those on an unlocked Windows desktop before publication.
 
 On a **clean, committed native Windows checkout** (not this unborn local checkout):
 
@@ -132,7 +146,6 @@ The public, cookie/credential-independent transport explicitly pages the GitHub 
 Restart refuses an in-progress Browser service operation. The existing exact-bundled-service fast update/uninstall shutdown hooks remain unchanged. Repository and consent paths are outside update payloads; no updater code reads or deletes them. A changed Browser bundle still requires the service's explicit approval. Existing published placeholder versions require one manual in-place installer upgrade after an updater-enabled release is published.
 
 `Storage.Update.Tests` links the actual production controller/backend into a portable executable harness. The existing `Storage.Tests` entrypoint runs this suite automatically, so both Linux validation and native installer packaging execute it. Run it independently with `dotnet run --project apps/windows/Storage.Update.Tests`; add `-- --live` for an optional read-only production-inventory/manifest/feed check (no package download or install). `node --test tests/windows-updates.test.mjs` protects Settings, assembly-version, runtime-XAML and lifecycle wiring. Fixture package bytes are test-only, not installable production packages. Compilation and these checks do **not** establish native Settings interaction or a real installed old-to-new upgrade; those remain Windows acceptance gates.
-
 
 Portable tooling checks: `node --test tests/windows-release.test.mjs` uses real PowerShell parsing and executable recursive-archive corruption/missing/duplicate/traversal checks, plus non-Windows fail-closed execution. PowerShell 7.2+ must be installed (`PWSH` can name an explicit executable); absence is an actionable failure, never a fake parser pass. These are tooling checks, not installed Windows acceptance.
 

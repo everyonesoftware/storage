@@ -4,6 +4,8 @@ using System.Text;
 using System.Text.Json;
 
 await Storage.Update.Tests.UpdateTestSuite.Run();
+await Storage.Tray.Tests.TrayTestSuite.Run();
+await Storage.Browser.Activation.Tests.ActivationTestSuite.Run();
 
 static void Check(bool value, string name) { if (!value) throw new Exception("FAIL " + name); Console.WriteLine("PASS " + name); }
 string xaml = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "BrowserSource/Shell.xaml"));

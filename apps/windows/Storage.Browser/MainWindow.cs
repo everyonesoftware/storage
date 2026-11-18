@@ -27,8 +27,10 @@ public sealed partial class MainWindow : Window
     private readonly string servicePath = Path.Combine(AppContext.BaseDirectory, "Service", "Storage.Service.exe");
     private T C<T>(string name) where T : class => (T)(root.FindName(name) ?? throw new InvalidOperationException("Missing control: " + name));
     private static SolidColorBrush Brush(byte r, byte g, byte b) => new(ColorHelper.FromArgb(255, r, g, b));
-    public MainWindow()
+    private readonly ActivationServicePolicy serviceStart;
+    public MainWindow(bool fromTray = false)
     {
+        serviceStart = new ActivationServicePolicy(fromTray);
         using var source = Assembly.GetExecutingAssembly().GetManifestResourceStream("Storage.Browser.Shell.xaml")!;
         using var reader = new StreamReader(source);
         root = (Grid)XamlReader.Load(reader.ReadToEnd());
@@ -101,11 +103,20 @@ public sealed partial class MainWindow : Window
         return Task.CompletedTask;
     }
 
+    internal void ActivateFromExistingLaunch()
+    {
+        // An activation wake-up is never permission to start or reconfigure the service.
+        serviceStart.SuppressAutoStart();
+        ActivationWindowsPlatform.BringForward(WinRT.Interop.WindowNative.GetWindowHandle(this), Activate);
+    }
+
     private async Task<Stream> ConnectAsync(CancellationToken token)
     {
         try { return await WindowsPeers.ConnectAsync(servicePath, token); }
-        catch (TimeoutException) when (!launchedService && File.Exists(servicePath))
+        catch (TimeoutException)
         {
+            if (!serviceStart.CanAutoStart(launchedService, ServiceLifetime.IsHostPresent(), File.Exists(servicePath)))
+                throw new StorageException("ServiceUnavailable", "Storage Service is not responding; it may be stopped or starting. Start it from the Storage tray menu, or wait for startup, then Refresh. Browser did not request a service start for this connection attempt.");
             launchedService = true;
             var start = new ProcessStartInfo(servicePath) { UseShellExecute = false, WorkingDirectory = Path.GetDirectoryName(servicePath)! };
             // This requests a service-owned default-No dialog, never a silent grant.

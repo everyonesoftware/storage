@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><EnableDefaultCompileItems>false</EnableDefaultCompileItems><InvariantGlobalization>true</InvariantGlobalization></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Storage.Service/*.cs" Link="Service/%(Filename)%(Extension)" />
+    <Compile Include="../../Storage.Client/*.cs" Link="Client/%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

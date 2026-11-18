@@ -14,7 +14,7 @@ function Invoke-Checked([string]$Command, [string[]]$Arguments) {
     & $Command @Arguments
     if ($LASTEXITCODE -ne 0) { throw "$Command failed ($LASTEXITCODE)" }
 }
-function Assert-X64Pe([string]$Path) {
+function Assert-X64Pe([string]$Path, [switch]$RequireGui) {
     $stream = [IO.File]::OpenRead($Path)
     $reader = [IO.BinaryReader]::new($stream)
     try {
@@ -23,6 +23,16 @@ function Assert-X64Pe([string]$Path) {
         if ($offset -gt $stream.Length - 6) { throw "Invalid PE offset: $Path" }
         $stream.Position = $offset
         if ($reader.ReadUInt32() -ne 0x4550 -or $reader.ReadUInt16() -ne 0x8664) { throw "Not Windows x64: $Path" }
+        if ($RequireGui) {
+            # An Exe apphost would create a console even if its UI stays hidden.
+            if ($offset -gt $stream.Length - 24) { throw "Missing PE optional header: $Path" }
+            $stream.Position = $offset + 20; $optionalSize = $reader.ReadUInt16()
+            if ($optionalSize -lt 70 -or $offset + 24 + $optionalSize -gt $stream.Length) { throw "Invalid PE optional header: $Path" }
+            $stream.Position = $offset + 24
+            if ($reader.ReadUInt16() -ne 0x20B) { throw "Not PE32+ executable: $Path" }
+            $stream.Position = $offset + 24 + 68
+            if ($reader.ReadUInt16() -ne 2) { throw "Console or non-GUI executable rejected: $Path" }
+        }
     } finally { $reader.Dispose(); $stream.Dispose() }
 }
 function Get-PayloadInventory([string]$Directory) {
@@ -67,11 +77,12 @@ function Assert-StandalonePayload([string]$Directory, [string]$ReleaseVersion, [
     foreach ($name in @('Storage.Browser.exe','Storage.Browser.dll','Storage.Browser.deps.json','Storage.Browser.runtimeconfig.json',
         'resources.pri','Assets/Storage.ico','Microsoft.UI.Xaml.dll','Microsoft.WindowsAppRuntime.dll','coreclr.dll','hostfxr.dll',
         'Service/Storage.Service.exe','Service/Storage.Service.dll','Service/Storage.Service.deps.json','Service/Storage.Service.runtimeconfig.json',
-        'Service/coreclr.dll','Service/hostfxr.dll','Service/storage_core.dll')) {
+        'Service/Assets/Storage.ico','Service/coreclr.dll','Service/hostfxr.dll','Service/storage_core.dll')) {
         $file = Get-Item -LiteralPath (Join-Path $Directory $name)
         if ($file.Length -le 0 -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw "Incomplete standalone payload: $name" }
     }
-    foreach ($name in @('Storage.Browser.exe','Service/Storage.Service.exe','Service/storage_core.dll')) { Assert-X64Pe (Join-Path $Directory $name) }
+    foreach ($name in @('Storage.Browser.exe','Service/Storage.Service.exe')) { Assert-X64Pe (Join-Path $Directory $name) -RequireGui }
+    Assert-X64Pe (Join-Path $Directory 'Service/storage_core.dll')
     foreach ($app in @('Storage.Browser','Service/Storage.Service')) {
         $runtime = Get-Content -LiteralPath (Join-Path $Directory "$app.runtimeconfig.json") -Raw | ConvertFrom-Json -AsHashtable
         if ($runtime.runtimeOptions.ContainsKey('framework') -or $runtime.runtimeOptions.ContainsKey('frameworks') -or -not $runtime.runtimeOptions.includedFrameworks) { throw 'Framework-dependent runtime rejected' }

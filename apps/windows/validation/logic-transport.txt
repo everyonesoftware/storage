@@ -1,3 +1,50 @@
+PASS user initiated check offers a newer Windows version
+PASS progress waits for explicit restart and staged update survives checking
+PASS manifest-backed paginated Windows selection and original download
+PASS malformed manifests, duplicate inventories and integrity failures rejected
+PASS other-platform/no-update, paging cap, identity, malformed feed and original-origin binding
+PASS real Velopack backend rejects unoffered install/download and disables downgrades
+PASS real backend rejects truncated and same-length wrong-hash cached nupkg before Ready/apply
+PASS valid cached nupkg reaches Ready then explicit native apply/exit seam
+PASS valid downloaded nupkg reaches Ready then explicit native apply/exit seam
+PASS re-tampered cached nupkg rejected before native apply/exit
+PASS restart integrity failure clears Ready without native apply/exit
+PASS no-update, downgrade, loose build, safe retry, preparation ordering, concurrent actions and close
+PASS updater transport has no credentials/cookies or URL rewriting fallback
+PASS StartReportsReadiness
+PASS StartupFailureAllowsRetry
+PASS StopDrainsBeforeRestart
+PASS QuitCancelsStartupAndAwaitsDisposal
+PASS SessionEndDrainsBeforeReturning
+PASS SessionEndHasABoundedDeadline
+PASS RunnerFaultIsObservedWithoutAnotherAction
+PASS VersionFourCallbackPreservesSignedAnchors
+PASS PopupFitsNegativeMonitorAndDpi
+PASS BrowserLaunchHasFixedSiblingTarget
+PASS DisposalFailurePreventsReplacement
+PASS NativeStructuresMatchWindowsAbi
+PASS tray launch never autostarts
+PASS stopped or starting host prevents autostart
+PASS normal absent-host launch may start bundled service
+PASS service starts at most once
+PASS missing executable cannot start
+PASS forwarded opening disables future autostart
+PASS owner listens without routing elsewhere
+PASS early activation retained and queued to UI
+PASS early activation delivered after window attachment
+PASS later activation restores existing window
+PASS close unregisters listener and ignores queued or late callbacks
+PASS close cleanup is idempotent
+PASS secondary signals owner and creates no GUI listener
+PASS secondary releases all OS handles
+PASS signal during listener registration is not lost
+PASS failed listener startup releases ownership handles
+PASS deployed path identity ignores Windows casing
+PASS different deployed executables do not share instance
+PASS different users do not share instance
+PASS minimized owner restores before activation and foreground
+PASS normal or maximized owner activates without restore
+21 activation behavior checks passed
 PASS runtime XAML typed named-control lookups match shell
 PASS runtime XAML does not require generated code
 PASS bounded frame round trip

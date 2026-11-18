@@ -19,11 +19,14 @@ internal static class Program
             File.WriteAllBytes(args[1], System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(health, Storage.Client.WireJson.Options));
             return;
         }
+        using var activation = new ActivationCoordinator(new ActivationWindowsPlatform());
+        if (!activation.IsOwner) return;
+        bool fromTray = args.Contains("--from-tray", StringComparer.Ordinal);
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Application.Start(callback =>
         {
             SynchronizationContext.SetSynchronizationContext(new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread()));
-            _ = new StorageApplication();
+            _ = new StorageApplication(activation, fromTray);
         });
     }
 }
@@ -31,6 +34,13 @@ public sealed partial class StorageApplication : Application, Microsoft.UI.Xaml.
 {
     private readonly Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsXamlMetaDataProvider metadata = new();
     private MainWindow? window;
+    private readonly ActivationCoordinator activation;
+    private readonly bool fromTray;
+    internal StorageApplication(ActivationCoordinator activation, bool fromTray)
+    {
+        this.activation = activation;
+        this.fromTray = fromTray;
+    }
     public Microsoft.UI.Xaml.Markup.IXamlType GetXamlType(Type type) => metadata.GetXamlType(type);
     public Microsoft.UI.Xaml.Markup.IXamlType GetXamlType(string name) => metadata.GetXamlType(name);
     public Microsoft.UI.Xaml.Markup.XmlnsDefinition[] GetXmlnsDefinitions() => metadata.GetXmlnsDefinitions();
@@ -38,6 +48,9 @@ public sealed partial class StorageApplication : Application, Microsoft.UI.Xaml.
     {
         Resources.MergedDictionaries.Add(new XamlControlsResources());
         Resources["SystemAccentColor"] = Windows.UI.Color.FromArgb(255, 54, 179, 198);
-        window = new MainWindow(); window.Activate();
+        window = new MainWindow(fromTray);
+        window.Closed += (_, _) => activation.Dispose();
+        window.Activate();
+        activation.Attach(action => { _ = window.DispatcherQueue.TryEnqueue(() => action()); }, window.ActivateFromExistingLaunch);
     }
 }

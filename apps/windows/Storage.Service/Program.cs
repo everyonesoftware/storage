@@ -1,10 +1,17 @@
 using Storage.Client;
+using System.Runtime.Versioning;
 namespace Storage.Service;
 internal static class Program
 {
-    public static async Task<int> Main(string[] args)
+    [STAThread]
+    public static int Main(string[] args)
     {
         if (!OperatingSystem.IsWindows()) { Console.Error.WriteLine("Storage Service production host requires Windows. Use Storage.Tests for Linux transport/core validation."); return 2; }
+        return RunWindows(args);
+    }
+    [SupportedOSPlatform("windows")]
+    private static int RunWindows(string[] args)
+    {
         try
         {
             DevelopmentGrant? development = null;
@@ -20,7 +27,6 @@ internal static class Program
             using var singleton = new Mutex(true, "Local\\" + WindowsPeers.PipeName.Replace('\\', '.'), out bool owns);
             if (!owns) { Console.Error.WriteLine("Storage Service is already running for this user."); return 3; }
             string home = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Everyonesoftware", "Storage");
-            Directory.CreateDirectory(home);
             var consent = new BundledBrowserConsent(AppContext.BaseDirectory, Path.Combine(home, "service-config"));
             if (development is null)
             {
@@ -32,25 +38,36 @@ internal static class Program
                     development = consent.Load();
                 }
             }
-            using var stop = new CancellationTokenSource();
             using var stopEvent = new EventWaitHandle(false, EventResetMode.ManualReset, ServiceLifetime.StopEventName(Environment.ProcessPath!));
-            var stopRegistration = ThreadPool.RegisterWaitForSingleObject(stopEvent, (_, _) => stop.Cancel(), null, Timeout.Infinite, true);
-            try
+            // This delegate runs off the STA. Its task owns the entire session and core,
+            // so cancellation is not complete until native work and disposal have drained.
+            var controller = new TrayController(async (ready, token) =>
             {
+                token.ThrowIfCancellationRequested();
                 string stage = Path.Combine(home, "staging"); Directory.CreateDirectory(stage);
                 foreach (string partial in Directory.EnumerateFiles(stage, "*.partial")) File.Delete(partial);
                 string library = Path.Combine(AppContext.BaseDirectory, "storage_core.dll");
                 if (!File.Exists(library)) throw new FileNotFoundException("Deploy the real Windows storage_core.dll beside Storage.Service.exe.");
                 using var core = new NativeCore(Path.Combine(home, "repository"), library);
                 var health = core.Execute(WireJson.Element(new { op = "health", args = new { } }));
-                if (!health.GetProperty("ok").GetBoolean()) throw new IOException("Repository initialization failed.");
-                Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop.Cancel(); };
-                Console.WriteLine("Storage Service ready. Local IPC only; unregistered applications denied.");
-                try { await WindowsHost.RunAsync(new ServiceSession(core, stage), development, stop.Token); }
-                catch (OperationCanceledException) when (stop.IsCancellationRequested) { }
-                return 0;
+                if (!health.GetProperty("ok").GetBoolean() || !health.TryGetProperty("result", out var result) ||
+                    !result.TryGetProperty("status", out var status) || status.GetString() != "healthy")
+                    throw new IOException("Repository initialization failed: " + health.GetRawText());
+                token.ThrowIfCancellationRequested();
+                await WindowsHost.RunAsync(new ServiceSession(core, stage), development, token, ready);
+            });
+            using var tray = new NativeTrayWindow(controller);
+            var stopRegistration = ThreadPool.RegisterWaitForSingleObject(stopEvent, (_, _) => tray.RequestQuit(), null, Timeout.Infinite, true);
+            try
+            {
+                return tray.Run();
             }
-            finally { stopRegistration.Unregister(null); }
+            finally
+            {
+                stopRegistration.Unregister(null);
+                controller.QuitAsync().GetAwaiter().GetResult();
+                singleton.ReleaseMutex();
+            }
         }
         catch (Exception error) { Console.Error.WriteLine(error.Message); return 1; }
     }

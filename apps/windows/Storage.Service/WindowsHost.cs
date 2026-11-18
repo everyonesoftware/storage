@@ -25,13 +25,15 @@ internal static class WindowsHost
         }
         finally { LocalFree(descriptor); }
     }
-    public static async Task RunAsync(ServiceSession session, DevelopmentGrant? development, CancellationToken token)
+    public static async Task RunAsync(ServiceSession session, DevelopmentGrant? development, CancellationToken token, Action? ready = null)
     {
         using var selfProcess = Process.GetCurrentProcess();
         var self = WindowsPeers.Inspect(selfProcess.SafeHandle);
         while (!token.IsCancellationRequested)
         {
             await using var pipe = CreateLocalPipe();
+            ready?.Invoke();
+            ready = null;
             await pipe.WaitForConnectionAsync(token);
             try
             {
