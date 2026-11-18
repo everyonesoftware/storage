@@ -28,8 +28,8 @@ New portable helper `bash scripts/build-android-native.sh` builds only required 
 
 Under `dist/windows/`:
 
-- `StorageWindows-win-x64-Setup.exe`
-- `StorageWindows-win-x64-Setup.exe.sha256`
+- `StorageWindows-0.1.N-win-x64-Setup.exe`
+- `StorageWindows-0.1.N-win-x64-Setup.exe.sha256`
 - `StorageWindows-0.1.N-win-x64-full.nupkg`
 - `releases.win-x64.json`
 - `assets.win-x64.json`

@@ -56,13 +56,15 @@ Expected Android user downloads:
 
 Expected Windows/update inventory:
 
-- `StorageWindows-win-x64-Setup.exe` and its `.sha256` sidecar.
+- `StorageWindows-0.1.N-win-x64-Setup.exe` and its `.sha256` sidecar.
 - `StorageWindows-0.1.N-win-x64-full.nupkg`.
 - `releases.win-x64.json`, `assets.win-x64.json`, `RELEASES-win-x64`.
 
 Each successful platform also publishes its own `Storage-<platform>-SHA256SUMS` and `storage-<platform>-release.json`. Distinct names prevent Android and Windows checksum/manifest collisions in the shared release. The manifest records exact source commit, version, sizes and hashes. It is uploaded only after payload verification, so an incomplete platform upload is not a successful baseline.
 
 Published assets are immutable. Reruns may repair missing assets using identical verified bytes; they must not overwrite conflicting existing bytes. Do not force a rebuild at the same version to replace a published binary; commit the changed build inputs to obtain a new version. Release-only reruns can reuse the original run's platform artifacts.
+
+New Windows installers include the application version in their filenames. Discovery also accepts complete historical inventories with `StorageWindows-win-x64-Setup.exe`; existing assets and download links are never renamed. Older installed updater implementations that require only the unversioned inventory need one manual in-place installer upgrade to accept the new inventory.
 
 ## Installer and authorization boundaries
 

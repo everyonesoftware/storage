@@ -28,11 +28,12 @@ const PLATFORMS = ['android', 'windows'];
 const HASH = /^[a-f0-9]{64}$/;
 const MAX_FILE = 4 * 1024 ** 3;
 const MANIFEST_LIMIT = 65536;
-function platformNames(platform, source) {
+function platformNames(platform, source, legacyInstaller = false) {
   if (!PLATFORMS.includes(platform)) throw new Error('Invalid platform.');
+  const installer = legacyInstaller ? 'StorageWindows-win-x64-Setup.exe' : `StorageWindows-${source.version}-win-x64-Setup.exe`;
   const payloads = platform === 'android'
     ? [`Storage-Service-${source.version}.apk`, `Storage-Browser-${source.version}.apk`]
-    : ['StorageWindows-win-x64-Setup.exe', 'StorageWindows-win-x64-Setup.exe.sha256', `StorageWindows-${source.version}-win-x64-full.nupkg`, 'releases.win-x64.json', 'assets.win-x64.json', 'RELEASES-win-x64'];
+    : [installer, `${installer}.sha256`, `StorageWindows-${source.version}-win-x64-full.nupkg`, 'releases.win-x64.json', 'assets.win-x64.json', 'RELEASES-win-x64'];
   return { payloads, sums: `Storage-${platform}-SHA256SUMS`, manifestName: `storage-${platform}-release.json` };
 }
 function safeName(name) {
@@ -59,10 +60,14 @@ function smallText(directory, name) {
 }
 function sumText(records) { return records.map(f => `${f.sha256}  ${f.name}\n`).join(''); }
 function checkSidecar(directory, platform, records) {
-  if (platform === 'windows' && smallText(directory, 'StorageWindows-win-x64-Setup.exe.sha256') !== sumText([records.find(f => f.name === 'StorageWindows-win-x64-Setup.exe')])) throw new Error('Windows installer sidecar hash mismatch.');
+  if (platform !== 'windows') return;
+  const installer = records.find(f => f.name.endsWith('-Setup.exe'));
+  if (smallText(directory, `${installer.name}.sha256`) !== sumText([installer])) throw new Error('Windows installer sidecar hash mismatch.');
 }
 export function validateManifest(manifest, platform, source) {
-  const { payloads, sums } = platformNames(platform, source);
+  // Historical publications remain immutable; new local inventories are versioned.
+  const legacyInstaller = platform === 'windows' && manifest?.files?.some(f => f?.name === 'StorageWindows-win-x64-Setup.exe');
+  const { payloads, sums } = platformNames(platform, source, legacyInstaller);
   if (!manifest || Object.keys(manifest).sort().join(',') !== ['schemaVersion', 'platform', 'version', 'count', 'tag', 'sourceCommit', 'signing', 'files'].sort().join(',') || manifest.schemaVersion !== 1 || manifest.platform !== platform || manifest.version !== source.version || manifest.count !== source.count || manifest.tag !== source.tag || manifest.sourceCommit !== source.sha || !SHA.test(manifest.sourceCommit) || manifest.signing !== (platform === 'android' ? 'release-key' : 'unsigned')) throw new Error('Manifest source/version/schema mismatch.');
   exactNames(manifest.files?.map(f => f?.name), [...payloads, sums]);
   for (const file of manifest.files) {

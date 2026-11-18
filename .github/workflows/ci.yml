@@ -238,7 +238,7 @@ jobs:
       - name: Install, render, verify service IPC and uninstall
         timeout-minutes: 5
         shell: pwsh
-        run: ./scripts/test-windows-installer.ps1 -InstallerPath dist/windows/StorageWindows-win-x64-Setup.exe -EvidenceDirectory artifacts/windows-smoke
+        run: ./scripts/test-windows-installer.ps1 -InstallerPath dist/windows/StorageWindows-${{ steps.version.outputs.version }}-win-x64-Setup.exe -EvidenceDirectory artifacts/windows-smoke
       - name: Validate Windows inventory and source manifest
         run: node scripts/release.mjs manifest --platform windows --directory dist/windows
       - name: Retain Windows lifecycle diagnostics

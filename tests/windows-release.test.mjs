@@ -77,6 +77,53 @@ test('PowerShell scripts parse, and non-Windows execution fails closed', () => {
  const smoke = ps('& ./scripts/test-windows-installer.ps1 -InstallerPath missing.exe -EvidenceDirectory missing');
  assert.notEqual(smoke.status,0); assert.match(smoke.stderr,/requires native Windows/);
 });
+test('installer rename preserves bytes and rewrites only the pinned Velopack installer asset', () => {
+ const result = ps(`
+ $ErrorActionPreference='Stop'; Set-StrictMode -Version Latest
+ $tokens=$null; $errors=$null
+ $ast=[Management.Automation.Language.Parser]::ParseFile('./scripts/build-windows-installer.ps1',[ref]$tokens,[ref]$errors)
+ $function=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Rename-VersionedInstaller'},$true)
+ if(-not $function){throw 'Missing versioned installer rename helper'}
+ Invoke-Expression $function.Extent.Text
+ $scratch=Join-Path ([IO.Path]::GetTempPath()) ('storage-rename-test-'+[guid]::NewGuid().ToString('N'))
+ $null=New-Item -ItemType Directory -Path $scratch
+ try {
+  foreach($mode in @('valid','duplicate','missing','wrong-package','existing-destination','mixed-sidecar')) {
+   $dir=Join-Path $scratch $mode; $null=New-Item -ItemType Directory -Path $dir
+   $old='StorageWindows-win-x64-Setup.exe'; $new='StorageWindows-0.1.42-win-x64-Setup.exe'
+   [IO.File]::WriteAllText((Join-Path $dir $old),'disposable installer fixture')
+   [IO.File]::WriteAllText((Join-Path $dir 'StorageWindows-0.1.42-win-x64-full.nupkg'),'disposable package fixture')
+   $assets=@(@{RelativeFileName=$old;Type='Installer'},@{RelativeFileName='StorageWindows-0.1.42-win-x64-full.nupkg';Type='Full'})
+   if($mode -eq 'duplicate'){$assets+=@{RelativeFileName=$old;Type='Installer'}}
+   if($mode -eq 'missing'){Remove-Item -LiteralPath (Join-Path $dir $old)}
+   if($mode -eq 'wrong-package'){$assets[1].RelativeFileName='StorageWindows-0.1.41-win-x64-full.nupkg'}
+   if($mode -eq 'existing-destination'){[IO.File]::WriteAllText((Join-Path $dir $new),'must not overwrite')}
+   if($mode -eq 'mixed-sidecar'){[IO.File]::WriteAllText((Join-Path $dir ($old+'.sha256')),'stale sidecar')}
+   $metadata=Join-Path $dir 'assets.win-x64.json'; $before=ConvertTo-Json -InputObject $assets -Compress
+   [IO.File]::WriteAllText($metadata,$before)
+   $caught=''; try {Rename-VersionedInstaller $dir '0.1.42'} catch {$caught=$_.ToString()}
+   if($mode -ne 'valid') {
+    if(-not $caught){throw ('Accepted '+$mode)}
+    if([IO.File]::ReadAllText($metadata) -cne $before){throw 'Invalid metadata mutated'}
+    if($mode -ne 'missing' -and -not (Test-Path -LiteralPath (Join-Path $dir $old))){throw 'Rejected rename mutated source'}
+    continue
+   }
+   if($caught){throw $caught}
+   if(Test-Path -LiteralPath (Join-Path $dir $old)){throw 'Unversioned installer remains'}
+   if([IO.File]::ReadAllText((Join-Path $dir $new)) -cne 'disposable installer fixture'){throw 'Installer bytes changed'}
+   $updated=Get-Content -LiteralPath $metadata -Raw | ConvertFrom-Json -AsHashtable -NoEnumerate
+   if($updated.Count -ne 2 -or $updated[0].RelativeFileName -cne $new -or $updated[0].Type -cne 'Installer' -or $updated[1].RelativeFileName -cne $assets[1].RelativeFileName -or $updated[1].Type -cne 'Full'){throw 'Incorrect renamed assets'}
+  }
+  Write-Output 'VERSIONED_INSTALLER_RENAME_PASSED'
+ } finally {Remove-Item -LiteralPath $scratch -Recurse -Force}
+ `);
+ assert.equal(result.status, 0, result.stdout + result.stderr);
+ assert.match(result.stdout, /VERSIONED_INSTALLER_RENAME_PASSED/);
+ const source = read('scripts/build-windows-installer.ps1');
+ assert.ok(source.indexOf('Rename-VersionedInstaller $output $Version') < source.indexOf('$hash = (Get-FileHash -LiteralPath $installer'));
+ assert.match(source, /\$installerName = "StorageWindows-\$Version-win-x64-Setup\.exe"/);
+});
+
 test('recursive archive gate preserves nested bytes and permits only pinned Velopack additions', () => {
  const result = ps(`
  $ErrorActionPreference='Stop'

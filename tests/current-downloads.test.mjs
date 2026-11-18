@@ -8,12 +8,13 @@ const repository = 'owner/repo';
 function fixture() {
   const releases = [], assets = new Map(), manifests = new Map();
   const state = { releases, assets, manifests };
-  state.add = (count, platforms) => {
+  state.add = (count, platforms, { legacyInstaller = false } = {}) => {
     const version = `0.1.${count}`, tag = `v${version}`, sha = String(count).padStart(40, 'a');
     const release = { id: count, tag_name: tag, target_commitish: sha, draft: false, prerelease: false, body: `Notes ${count}\n` };
     releases.push(release); const files = []; assets.set(count, files);
     for (const platform of platforms) {
-      const names = platform === 'android' ? [`Storage-Service-${version}.apk`, `Storage-Browser-${version}.apk`, 'Storage-android-SHA256SUMS'] : ['StorageWindows-win-x64-Setup.exe', 'StorageWindows-win-x64-Setup.exe.sha256', `StorageWindows-${version}-win-x64-full.nupkg`, 'releases.win-x64.json', 'assets.win-x64.json', 'RELEASES-win-x64', 'Storage-windows-SHA256SUMS'];
+      const installer = legacyInstaller ? 'StorageWindows-win-x64-Setup.exe' : `StorageWindows-${version}-win-x64-Setup.exe`;
+      const names = platform === 'android' ? [`Storage-Service-${version}.apk`, `Storage-Browser-${version}.apk`, 'Storage-android-SHA256SUMS'] : [installer, `${installer}.sha256`, `StorageWindows-${version}-win-x64-full.nupkg`, 'releases.win-x64.json', 'assets.win-x64.json', 'RELEASES-win-x64', 'Storage-windows-SHA256SUMS'];
       const manifest = { schemaVersion: 1, platform, version, count, tag, sourceCommit: sha, signing: platform === 'android' ? 'release-key' : 'unsigned', files: names.map(name => ({ name, bytes: 10, sha256: 'b'.repeat(64) })) };
       const records = [...manifest.files, { name: `storage-${platform}-release.json`, bytes: 10, sha256: 'c'.repeat(64) }];
       for (const record of records) {
@@ -39,7 +40,18 @@ test('selects verified platforms independently in numeric stable order and retai
   assert.equal(inventory.android.service, 'https://github.com/owner/repo/releases/download/v0.1.9/Storage-Service-0.1.9.apk');
   const table = renderDownloads(inventory);
   assert.match(table, /Storage-Browser-0\.1\.9\.apk/); assert.match(table, /Storage-android-SHA256SUMS/);
-  assert.match(table, /StorageWindows-win-x64-Setup\.exe\.sha256/);  assert.match(table, /service first/i); assert.match(table, /unsigned/i);
+  assert.match(table, /StorageWindows-0\.1\.12-win-x64-Setup\.exe\.sha256/);  assert.match(table, /service first/i); assert.match(table, /unsigned/i);
+});
+
+test('preserves original legacy installer links and rejects mixed or wrong-version inventories', async () => {
+  const { collectDownloads } = await import(moduleUrl);
+  const legacy = fixture(); legacy.add(12, ['windows'], { legacyInstaller: true });
+  assert.equal(collectDownloads({ repository, api: legacy.api }).windows.url, 'https://github.com/owner/repo/releases/download/v0.1.12/StorageWindows-win-x64-Setup.exe');
+  for (const replacement of ['StorageWindows-win-x64-Setup.exe.sha256', 'StorageWindows-0.1.11-win-x64-Setup.exe.sha256']) {
+    const f = fixture(); f.add(12, ['windows']);
+    f.manifests.values().next().value.files[1].name = replacement;
+    assert.throws(() => collectDownloads({ repository, api: f.api }), /inventory/);
+  }
 });
 
 test('fails closed on malformed stable inventory instead of silently selecting older publications', async () => {

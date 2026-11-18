@@ -16,7 +16,8 @@ export function collectDownloads({ repository, api }) {
   for (const platform of ['android', 'windows']) {
     const publication = publishedBaseline(platform, { api: verifiedApi, details: true });
     if (!publication) continue;
-    const { source, assets } = publication;
+    const { source, assets, manifest } = publication;
+    const installer = platform === 'windows' ? manifest.files.find(f => f.name.endsWith('-Setup.exe')).name : null;
     const url = name => {
       const asset = assets.find(a => a.name === name);
       const expected = `https://github.com/${repository}/releases/download/${source.tag}/${name}`;
@@ -24,7 +25,7 @@ export function collectDownloads({ repository, api }) {
       return asset.browser_download_url;
     };
     inventory[platform] = { version: source.version, tag: source.tag, sourceCommit: source.sha,
-      ...(platform === 'android' ? { service: url(`Storage-Service-${source.version}.apk`), browser: url(`Storage-Browser-${source.version}.apk`), checksum: url('Storage-android-SHA256SUMS') } : { url: url('StorageWindows-win-x64-Setup.exe'), checksum: url('StorageWindows-win-x64-Setup.exe.sha256') }) };
+      ...(platform === 'android' ? { service: url(`Storage-Service-${source.version}.apk`), browser: url(`Storage-Browser-${source.version}.apk`), checksum: url('Storage-android-SHA256SUMS') } : { url: url(installer), checksum: url(`${installer}.sha256`) }) };
   }
   return inventory;
 }

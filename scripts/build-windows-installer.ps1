@@ -73,6 +73,30 @@ function Assert-PackagedPayload([string]$PublishDirectory, [string]$PackagePath)
         if ($found.Count -ne $expected.Count) { throw 'Packaged payload missing recursive published files' }
     } finally { $archive.Dispose(); $stream.Dispose() }
 }
+function Rename-VersionedInstaller([string]$Directory, [string]$ReleaseVersion) {
+    # Pinned vpk 1.2.161 emits an unversioned setup name and a two-entry asset array.
+    $oldName = 'StorageWindows-win-x64-Setup.exe'
+    $newName = "StorageWindows-$ReleaseVersion-win-x64-Setup.exe"
+    $packageName = "StorageWindows-$ReleaseVersion-win-x64-full.nupkg"
+    $metadata = Join-Path $Directory 'assets.win-x64.json'
+    $assets = Get-Content -LiteralPath $metadata -Raw | ConvertFrom-Json -AsHashtable -NoEnumerate
+    if ($assets -isnot [array] -or $assets.Count -ne 2) { throw 'Unexpected Velopack asset array' }
+    $installerAsset = $null; $packageAsset = $null
+    foreach ($asset in $assets) {
+        if ($asset -isnot [Collections.IDictionary] -or ($asset.Keys | Sort-Object) -join ',' -cne 'RelativeFileName,Type') { throw 'Unexpected Velopack asset fields' }
+        if ($asset.Type -ceq 'Installer' -and $asset.RelativeFileName -ceq $oldName -and $null -eq $installerAsset) { $installerAsset = $asset }
+        elseif ($asset.Type -ceq 'Full' -and $asset.RelativeFileName -ceq $packageName -and $null -eq $packageAsset) { $packageAsset = $asset }
+        else { throw 'Unexpected Velopack asset identity' }
+        $file = Get-Item -LiteralPath (Join-Path $Directory $asset.RelativeFileName)
+        if ($file.PSIsContainer -or $file.Length -le 0 -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Missing or linked Velopack asset' }
+    }
+    foreach ($name in @($newName, "$oldName.sha256", "$newName.sha256")) {
+        if (Test-Path -LiteralPath (Join-Path $Directory $name)) { throw 'Installer rename destination or stale sidecar already exists' }
+    }
+    Move-Item -LiteralPath (Join-Path $Directory $oldName) -Destination (Join-Path $Directory $newName)
+    $installerAsset.RelativeFileName = $newName
+    [IO.File]::WriteAllText($metadata, (ConvertTo-Json -InputObject $assets -Depth 4 -Compress), [Text.UTF8Encoding]::new($false))
+}
 function Assert-StandalonePayload([string]$Directory, [string]$ReleaseVersion, [string]$Commit) {
     foreach ($name in @('Storage.Browser.exe','Storage.Browser.dll','Storage.Browser.deps.json','Storage.Browser.runtimeconfig.json',
         'resources.pri','Assets/Storage.ico','Microsoft.UI.Xaml.dll','Microsoft.WindowsAppRuntime.dll','coreclr.dll','hostfxr.dll',
@@ -131,11 +155,13 @@ try {
             '--framework','vcredist143-x64','--noPortable','--noDefaultExclude','--delta','None','--exclude','(?!)','--shortcuts','StartMenuRoot','--outputDir',$output,'--yes','--skip-updates')
     } finally { Pop-Location }
     Assert-PackagedPayload $publish (Join-Path $output "StorageWindows-$Version-win-x64-full.nupkg")
-    $installer = Join-Path $output 'StorageWindows-win-x64-Setup.exe'
+    Rename-VersionedInstaller $output $Version
+    $installerName = "StorageWindows-$Version-win-x64-Setup.exe"
+    $installer = Join-Path $output $installerName
     Assert-X64Pe $installer
     $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-    [IO.File]::WriteAllText("$installer.sha256", "$hash  StorageWindows-win-x64-Setup.exe`n", [Text.UTF8Encoding]::new($false))
-    $names = @('StorageWindows-win-x64-Setup.exe','StorageWindows-win-x64-Setup.exe.sha256',"StorageWindows-$Version-win-x64-full.nupkg",'releases.win-x64.json','assets.win-x64.json','RELEASES-win-x64')
+    [IO.File]::WriteAllText("$installer.sha256", "$hash  $installerName`n", [Text.UTF8Encoding]::new($false))
+    $names = @($installerName,"$installerName.sha256", "StorageWindows-$Version-win-x64-full.nupkg",'releases.win-x64.json','assets.win-x64.json','RELEASES-win-x64')
     $actual = @(Get-ChildItem -LiteralPath $output -Force)
     if ($actual.Count -ne $names.Count) { throw 'Unexpected installer output inventory' }
     foreach ($name in $names) { if (-not (Get-Item -LiteralPath (Join-Path $output $name)).Length) { throw "Missing output: $name" } }

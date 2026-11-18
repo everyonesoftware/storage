@@ -128,7 +128,7 @@ $release = node scripts/release.mjs version | ConvertFrom-Json
 ./scripts/build-windows-installer.ps1 -Version $release.version -SourceCommit $release.sha `
   -NativeDll artifacts/native/windows-x64/storage_core.dll -OutputDirectory dist/windows -AllowUnsigned
 ./scripts/test-windows-installer.ps1 `
-  -InstallerPath dist/windows/StorageWindows-win-x64-Setup.exe -EvidenceDirectory artifacts/windows-smoke
+  -InstallerPath "dist/windows/StorageWindows-$($release.version)-win-x64-Setup.exe" -EvidenceDirectory artifacts/windows-smoke
 ```
 
 The Windows CI job builds Rust **natively with x64 MSVC**, not the Linux cross-build DLL, before invoking this CLI. Packaging executes the actual `Storage.Tests` harness with that DLL, publishes self-contained Browser and Service with release version/source metadata, requires native WinUI runtime and `resources.pri`, and hashes **every recursive published payload file against its `lib/app/` ZIP entry**. It disables vpk's default exclusions so symbols/runtime diagnostics cannot disappear silently. Only the pinned tool's `sq.version`, `Squirrel.exe` and `Storage_ExecutionStub.exe` additions are allowed. The flat six-file inventory is exactly `contracts/release-automation.md`; common tooling owns the platform manifest and aggregate checksum, not this script. The tool manifest and Browser SDK both pin Velopack 1.2.161.

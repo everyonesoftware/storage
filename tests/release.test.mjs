@@ -26,7 +26,7 @@ function commit(root, name = 'core/input', content = 'one') {
 function payloadDirectory(t, root, platform, version = '0.1.1') {
   const directory = mkdtempSync(join(scratch, `storage-${platform}-`));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const names = platform === 'android' ? [`Storage-Service-${version}.apk`, `Storage-Browser-${version}.apk`] : ['StorageWindows-win-x64-Setup.exe', 'StorageWindows-win-x64-Setup.exe.sha256', `StorageWindows-${version}-win-x64-full.nupkg`, 'releases.win-x64.json', 'assets.win-x64.json', 'RELEASES-win-x64'];
+  const names = platform === 'android' ? [`Storage-Service-${version}.apk`, `Storage-Browser-${version}.apk`] : [`StorageWindows-${version}-win-x64-Setup.exe`, `StorageWindows-${version}-win-x64-Setup.exe.sha256`, `StorageWindows-${version}-win-x64-full.nupkg`, 'releases.win-x64.json', 'assets.win-x64.json', 'RELEASES-win-x64'];
   for (const name of names) writeFileSync(join(directory, name), `disposable test payload ${name}`);
   if (platform === 'windows') writeFileSync(join(directory, names[1]), `${hash(readFileSync(join(directory, names[0])))}  ${names[0]}\n`);
   return directory;
@@ -60,7 +60,7 @@ test('manifest refuses unexpected files, symlinks, stale source and wrong sideca
   commit(root, 'core/changed', 'next');
   assert.throws(() => validateDirectory({ root, platform: 'android', directory }), /inventory|source|version/);
   const windows = payloadDirectory(t, root, 'windows', '0.1.2');
-  writeFileSync(join(windows, 'StorageWindows-win-x64-Setup.exe.sha256'), `${'0'.repeat(64)}  StorageWindows-win-x64-Setup.exe\n`);
+  writeFileSync(join(windows, 'StorageWindows-0.1.2-win-x64-Setup.exe.sha256'), `${'0'.repeat(64)}  StorageWindows-0.1.2-win-x64-Setup.exe\n`);
   assert.throws(() => createManifest({ root, platform: 'windows', directory: windows }), /sidecar/);
 });
 function publicationApi({ source, platform, manifest, assets = [], releases, object }) {

@@ -23,6 +23,10 @@ static class FeedTests
         }
         finally { File.Delete(target); }
         Console.WriteLine("PASS manifest-backed paginated Windows selection and original download");
+        var legacy = new FixtureDownloader();
+        legacy.Pages[2] = [legacy.Release("0.1.20", legacyInstaller: true)];
+        var legacyFeed = await new WindowsGithubSource(legacy).GetReleaseFeed(NullVelopackLogger.Instance, "StorageWindows", "win-x64");
+        Require(legacyFeed.Assets.Length == 1, "Retain legacy unversioned installer publications");
         foreach (string fault in new[] { "source", "signing", "missing-installer", "extra-file", "duplicate-property", "duplicate-tag", "unsafe-name", "feed-hash", "package-hash" })
         {
             var bad = new FixtureDownloader();
@@ -77,12 +81,13 @@ sealed class FixtureDownloader : IFileDownloader
         Pages[1] = Enumerable.Range(100, 99).Select(n => Release($"0.1.{n}", false)).Prepend(Release("0.1.9")).ToArray();
         Pages[2] = [Release("0.1.20"), Release("0.1.19"), Release("0.1.99", true, true)];
     }
-    public object Release(string version, bool windows = true, bool prerelease = false)
+    public object Release(string version, bool windows = true, bool prerelease = false, bool legacyInstaller = false)
     {
         string tag = "v" + version;
         string package = $"StorageWindows-{version}-win-x64-full.nupkg";
         string prefix = WindowsGithubSource.Repository + "/releases/download/" + tag + "/";
-        var names = windows ? new[] { "StorageWindows-win-x64-Setup.exe", "StorageWindows-win-x64-Setup.exe.sha256", package, "releases.win-x64.json", "assets.win-x64.json", "RELEASES-win-x64", "Storage-windows-SHA256SUMS" } : ["Storage-Browser-" + version + ".apk"];
+        string installer = legacyInstaller ? "StorageWindows-win-x64-Setup.exe" : $"StorageWindows-{version}-win-x64-Setup.exe";
+        var names = windows ? new[] { installer, installer + ".sha256", package, "releases.win-x64.json", "assets.win-x64.json", "RELEASES-win-x64", "Storage-windows-SHA256SUMS" } : ["Storage-Browser-" + version + ".apk"];
         if (windows)
         {
             var feed = new { Assets = new[] { new { PackageId = "StorageWindows", Version = version, Type = "Full", FileName = package, Size = Package.Length, SHA256 = Hash(Package).ToUpperInvariant() } } };

@@ -55,6 +55,7 @@ test('Windows publishes only after native installer lifecycle, with diagnostics 
  assert.match(windows, /x86_64-pc-windows-msvc/);
  assert.match(windows, /build-windows-installer\.ps1/);
  assert.match(windows, /test-windows-installer\.ps1/);
+ assert.ok(windows.includes('StorageWindows-${{ steps.version.outputs.version }}-win-x64-Setup.exe'), 'Lifecycle gate must install the exact versioned output');
  assert.match(windows, /timeout-minutes: 5/);
  assert.match(windows, /if: always\(\)/);
  assert.match(windows, /release\.mjs manifest --platform windows/);

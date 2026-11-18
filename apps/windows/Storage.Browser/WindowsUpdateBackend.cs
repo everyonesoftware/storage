@@ -57,7 +57,9 @@ public sealed class WindowsGithubSource(IFileDownloader? downloader = null) : IU
                 RequireProperties(root, "schemaVersion", "platform", "version", "count", "tag", "sourceCommit", "signing", "files");
                 if (!Regex.IsMatch(root.GetProperty("sourceCommit").GetString() ?? "", @"\A[0-9a-f]{40}\z") || root.GetProperty("signing").GetString() != "unsigned") throw new InvalidDataException("Invalid Windows publication identity.");
                 var files = root.GetProperty("files").EnumerateArray().ToDictionary(f => f.GetProperty("name").GetString()!, StringComparer.OrdinalIgnoreCase);
-                string[] expected = ["StorageWindows-win-x64-Setup.exe", "StorageWindows-win-x64-Setup.exe.sha256", $"StorageWindows-{version}-{Channel}-full.nupkg", $"releases.{Channel}.json", $"assets.{Channel}.json", "RELEASES-win-x64", "Storage-windows-SHA256SUMS"];
+                // Keep already-published unversioned installers discoverable without relabeling them.
+                string installer = files.ContainsKey("StorageWindows-win-x64-Setup.exe") ? "StorageWindows-win-x64-Setup.exe" : $"StorageWindows-{version}-{Channel}-Setup.exe";
+                string[] expected = [installer, installer + ".sha256", $"StorageWindows-{version}-{Channel}-full.nupkg", $"releases.{Channel}.json", $"assets.{Channel}.json", "RELEASES-win-x64", "Storage-windows-SHA256SUMS"];
                 if (!files.Keys.Order(StringComparer.Ordinal).SequenceEqual(expected.Order(StringComparer.Ordinal))) throw new InvalidDataException("Incomplete Windows platform inventory.");
                 foreach (var (name, file) in files)
                 {
