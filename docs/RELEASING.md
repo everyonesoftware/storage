@@ -70,7 +70,7 @@ A Velopack package is not permission to bypass Storage's per-application authori
 
 The initial Android debug APKs already delivered are signed with a development certificate. A production-key-signed build cannot silently update those installations. Export any needed content before manually transitioning; uninstalling/clearing Storage Service deletes its local repository. There is no automatic debug-to-release repository migration.
 
-A published update feed is not proof of implemented in-app updating. Settings behavior and any remaining update-flow limits are documented in each platform README; do not infer check/download/restart acceptance from packaging alone.
+A published update feed is not proof of in-app upgrade acceptance. The working tree implements user-initiated Settings updating on Windows and Android; behavior and remaining native acceptance gates are documented in [the update contract](../contracts/application-updates.md) and each platform README. Existing placeholder releases need one manual in-place upgrade to the first updater-enabled release. Windows uses the existing Velopack installer identity; Android must retain the installed release signer and update both Service and Browser without uninstalling. No updater-enabled release is implied by local implementation or compilation.
 
 ## Local checks and hosted acceptance
 

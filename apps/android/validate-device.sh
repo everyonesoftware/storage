@@ -22,6 +22,9 @@ if (!match || Number(match[1]) !== Number(process.argv[3]) || /FAILURES!!!|short
 }
 JS
 }
+run_test updates-installer com.everyonesoftware.storage.browser com.everyonesoftware.storage.browser.updates.UpdateInstallerTest 4
+run_test updates-settings com.everyonesoftware.storage.browser com.everyonesoftware.storage.browser.updates.UpdateSettingsTest 4
+run_test updates-restart com.everyonesoftware.storage.browser com.everyonesoftware.storage.browser.updates.UpdateRestartTest 5
 run_test service-binder com.everyonesoftware.storage.service com.everyonesoftware.storage.service.StorageBinderTest 8
 run_test denied-caller com.everyonesoftware.storage.denied com.everyonesoftware.storage.denied.DeniedCallerTest 1
 adb -s "$serial" shell am force-stop com.everyonesoftware.storage.browser
@@ -29,6 +32,9 @@ run_test cold-seed com.everyonesoftware.storage.service com.everyonesoftware.sto
 adb -s "$serial" shell am force-stop com.everyonesoftware.storage.service
 run_test cold-verify com.everyonesoftware.storage.service com.everyonesoftware.storage.service.ColdRestartTest 1 -e phase verify
 run_test cold-binding com.everyonesoftware.storage.browser com.everyonesoftware.storage.browser.ColdBindingRestartTest 1
+run_test updates-continuity-seed com.everyonesoftware.storage.browser com.everyonesoftware.storage.browser.updates.UpdateContinuityTest 1 -e phase seed
+adb -s "$serial" shell am force-stop com.everyonesoftware.storage.service
+run_test updates-continuity-verify com.everyonesoftware.storage.browser com.everyonesoftware.storage.browser.updates.UpdateContinuityTest 1 -e phase verify
 run_test listing-notice com.everyonesoftware.storage.browser com.everyonesoftware.storage.browser.ListingNoticeTest 2
 run_test browser-binder com.everyonesoftware.storage.browser com.everyonesoftware.storage.browser.BrowserBinderTest 2
 adb -s "$serial" pull /sdcard/Android/data/com.everyonesoftware.storage.browser/files/items-grid.png "$out/items-grid.png"

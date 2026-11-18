@@ -1,0 +1,43 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const root = new URL('../apps/windows/Storage.Browser/', import.meta.url);
+const read = path => fs.readFileSync(new URL(path, root), 'utf8');
+test('Settings exposes named native update actions, progress, live status and actual assembly version', () => {
+  const xaml = read('Shell.xaml');
+  for (const [tag, name] of [['Button', 'CheckUpdates'], ['Button', 'DownloadUpdate'], ['Button', 'RestartUpdate'], ['ProgressBar', 'UpdateProgress'], ['TextBlock', 'ApplicationVersion']])
+    assert.match(xaml, new RegExp(`<${tag}[^>]*x:Name="${name}"`));
+  assert.match(xaml, /x:Name="UpdateStatus"[^>]*AutomationProperties.LiveSetting="Polite"/);
+  assert.doesNotMatch(xaml, /0\.1\.0|not connected to the release feed/);
+});
+test('Panel is attached after XAML load, disposed with window and routes user actions through controller', () => {
+  const main = read('MainWindow.cs'), panel = read('WindowsUpdatesPanel.cs');
+  assert.match(main, /updates = new WindowsUpdatesPanel\(root, DispatcherQueue, PrepareUpdateRestartAsync\)/);
+  assert.match(main, /updates\.Dispose\(\)/);
+  assert.match(main, /if \(busy\) throw new InvalidOperationException/);
+  assert.doesNotMatch(main, /No network check was performed/);
+  assert.match(panel, /AssemblyInformationalVersionAttribute/);
+  for (const action of ['CheckAsync', 'DownloadAsync', 'RestartAsync']) assert.match(panel, new RegExp(`controller\\.${action}\\(\\)`));
+  assert.match(panel, /Render\(controller.Status\)/);
+  assert.match(panel, /TryEnqueue/);
+  assert.doesNotMatch(panel, /\.Parent/);
+});
+test('existing native project harness runs real updater behavior tests', () => {
+  assert.match(read('../Storage.Tests/Storage.Tests.csproj'), /ProjectReference Include="\.\.\/Storage.Update.Tests\/Storage.Update.Tests.csproj"/);
+  assert.match(read('../Storage.Tests/Program.cs'), /await Storage.Update.Tests.UpdateTestSuite.Run\(\)/);
+});
+test('native harness includes cached-package integrity behaviors against the actual backend and SDK locator', () => {
+  assert.match(read('../Storage.Update.Tests/Program.cs'), /await CachedPackageTests\.Run\(\)/);
+  const behavior = read('../Storage.Update.Tests/CachedPackageTests.cs');
+  assert.match(behavior, /new WindowsUpdateBackend\(new WindowsGithubSource\(Downloader\), Locator\)/);
+  assert.match(behavior, /RecordingLocator : TestVelopackLocator, IProcessImpl/);
+  for (const behaviorName of ['ValidPackage', 'RetamperedPackage', 'RetamperedController'])
+    assert.match(behavior, new RegExp(`await ${behaviorName}\\(`));
+});
+test('startup autoapply stays disabled and exact bundled-service hooks survive', () => {
+  const program = read('Program.cs');
+  assert.match(program, /SetAutoApplyOnStartup\(false\)/);
+  for (const hook of ['OnBeforeUninstallFastCallback', 'OnBeforeUpdateFastCallback'])
+    assert.match(program, new RegExp(`${hook}\\(_ => Storage\\.Client\\.ServiceLifetime\\.StopBundled\\(service\\)\\)`));
+  assert.match(read('Storage.Browser.csproj'), /PackageReference Include="Velopack" Version="1.2.161"/);
+});

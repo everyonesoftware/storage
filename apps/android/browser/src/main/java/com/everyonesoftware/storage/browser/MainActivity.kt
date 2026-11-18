@@ -188,8 +188,8 @@ class MainActivity : ComponentActivity() {
      }
      page == "Settings" -> LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
       item { Text("Settings", style = MaterialTheme.typography.headlineMedium) }
-      item { Section("About Storage") { Text("Browser 0.1.0 · local vertical slice"); Text("The browser has no repository access. All content operations are authenticated by Storage Service.") } }
-      item { Section("Updates") { Text("No release feed configured."); Button(onClick = { notice = "Update checking is not configured: no published Android release feed." }) { Text("Check for updates") } } }
+      item { Section("About Storage") { Text("The browser has no repository access. All content operations are authenticated by Storage Service.") } }
+      item { Section("Updates") { com.everyonesoftware.storage.browser.updates.UpdateSettings() } }
       item { Section("Appearance") { Text("Follows your device’s light or dark theme.") } }
      }
     }

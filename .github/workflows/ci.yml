@@ -52,7 +52,7 @@ jobs:
           mkdir -p "$TMPDIR"
           node scripts/lint-workflow.mjs --actionlint "$RUNNER_TEMP/actionlint/actionlint"
       - name: Test release selection, manifests, publication and workflow guards
-        run: node --test tests/release.test.mjs tests/current-downloads.test.mjs tests/ci-workflow.test.mjs tests/android-release.test.mjs tests/windows-release.test.mjs
+        run: node --test tests/release.test.mjs tests/current-downloads.test.mjs tests/ci-workflow.test.mjs tests/android-release.test.mjs tests/windows-release.test.mjs tests/android-updates.test.mjs tests/android-update-finalization.test.mjs tests/windows-updates.test.mjs
       - name: Select changed platforms from verified publications
         id: select
         env:
@@ -110,11 +110,11 @@ jobs:
           rustup target add --toolchain 1.100.0 aarch64-linux-android x86_64-linux-android
       - name: Build actual Android native engines
         run: bash scripts/build-android-native.sh
+      - name: Build disposable debug updater fixtures and restore code-1 test products
+        run: bash apps/android/build-update-fixtures.sh
       - name: Build native-containing test APKs, unit tests and lint
-        env:
-          COMMIT_COUNT: ${{ steps.version.outputs.count }}
         run: |
-          bash apps/android/gradlew -p apps/android :service:testDebugUnitTest :service:lintDebug :service:assembleDebug :service:assembleDebugAndroidTest :browser:lintDebug :browser:assembleDebug :browser:assembleDebugAndroidTest :denied:assembleDebug :denied:assembleDebugAndroidTest "-PstorageCommitCount=$COMMIT_COUNT" --no-daemon --max-workers=2
+          bash apps/android/gradlew -p apps/android :service:testDebugUnitTest :service:lintDebug :service:assembleDebug :service:assembleDebugAndroidTest :browser:testDebugUnitTest :browser:lintDebug :browser:assembleDebug :browser:assembleDebugAndroidTest :denied:assembleDebug :denied:assembleDebugAndroidTest --no-daemon --max-workers=2
       - name: Verify release signing configuration fails closed
         env:
           STORAGE_ANDROID_GRADLE_TESTS: '1'
@@ -229,7 +229,7 @@ jobs:
           dotnet run --project apps/windows/Storage.Tests --configuration Release -- (Resolve-Path artifacts/native/windows-x64/storage_core.dll).Path
           if ($LASTEXITCODE -ne 0) { throw 'Native Windows client/service assertions failed.' }
       - name: Test Windows release and installer contracts
-        run: node --test tests/windows-release.test.mjs
+        run: node --test tests/windows-release.test.mjs tests/windows-updates.test.mjs
       - name: Build complete native Windows installer and update inventory
         shell: pwsh
         env:

@@ -1,5 +1,157 @@
 # Android validation evidence
 
+## User-initiated updater — November 18, 2026
+
+### Final sequential installed-upgrade gate — passed on API 29
+
+Pre-commit follow-up: cancellation-finalization exceptions are now handled inside
+the finalizer with a visible cleanup-retry state and unconditional gate release.
+The deterministic coroutine cleanup-failure regression passed; Browser JVM now
+contains **24 passing tests**. This narrow controller/UI change follows the
+31-execution device/OS-upgrade evidence below; that evidence is not claimed as a
+repeat of the finalization-failure path on-device. The final source remains gated
+by the hosted instrumentation job.
+
+The atomic-path failure below is historical and superseded by one Service-first
+session at a time on every supported Android version. Final-source Settings
+successfully upgraded the same-debug-signer Service from code 1 to code 2, then
+offered the separate Browser action and upgraded Browser from code 1 to code 2.
+Each package used an actual Android confirmation. Declining Service and retrying,
+and force-stopping Browser during pending Service consent, were also exercised.
+
+Final full device gate: **31 passing executions**, with exact groups
+`4,4,5,8,1,1,1,1,1,1,2,2`. Browser JVM: **23 passing tests**; Service JVM:
+**5 passing tests**, no failures/errors/skips. Native-containing products, both
+lint gates and all test APKs built successfully. Parent independently reran the
+full build/unit/lint gate and verified those XML totals.
+
+After Service and again after Browser upgrade, cold Service and Browser-UID Binder
+reads retained their original **65,539-byte** fixtures and the same datastore,
+device and immutable-version IDs. Parent compared before/after identity snapshots
+byte-for-byte and verified pulled installed APK SHA-256 values exactly matched
+the final code-2 fixtures. Parent inspected final Settings screenshots showing
+Service 2/Browser 1 with **Install Browser update**, then both at `0.1.2 (2)`
+with no remaining download/install action for that publication.
+
+Evidence: `build/update-validation/sequential/RESULT.md`,
+`sequential/os-final/verified-result.json`, full build/device logs, OS prompts,
+version readbacks, identity snapshots and installed APK copies. These are debug
+fixtures with synthetic release metadata staged through `run-as`, not a published
+release or production-signer upgrade. An intermediate debug baseline reset was
+test setup only; final code-1-to-2 upgrades used the actual Settings/OS UI.
+The old unpublished atomic journal was preserved and isolated, not silently
+discarded or claimed recovered. The owned emulator was gracefully stopped.
+
+Remaining: API 26, API 31+ and physical-phone runtime acceptance. Existing
+placeholder releases still need one manual in-place upgrade to acquire the updater.
+No signing-key access, commit, push or publication was performed.
+
+### Earlier atomic installed-upgrade failure — retained history
+
+After the build/session checks below, a separate worker exercised the actual
+Settings install action on the task-owned API-29 emulator using explicitly
+TEST-only same-debug-signer code-2 fixtures. Android's install-from-source
+permission was approved in its native Settings page. Two atomic commit attempts
+failed before an installation confirmation appeared: OS final status `-110`,
+`No child sessions found!`. This is a real failed upgrade gate, not a pass.
+Both products remained code 1. The pre/post-failure cold-repository checks passed
+with stable device/datastore identity and exact 65,539-byte original content;
+that proves persistence after failure, not continuity across an upgrade.
+
+Evidence: `build/os-upgrade-acceptance/RESULT.md`, failure logcats, OS session
+dumps, version readbacks, test logs, UI XML and inspected screenshots. Session
+creation/cancellation tests did not establish successful commit. The atomic
+commit failure led to the final explicit sequential policy above. Independent
+review's interrupted-session/cancellation issues were fixed and regression-tested;
+the sequential real-install gate was then rerun successfully. No production signing
+key or published release was modified.
+
+### Earlier build/session checks — before real installed-upgrade attempt
+
+**Native-containing debug build, 20 JVM tests, lint, and the full
+23-execution owned-emulator gate passed. No OS install or permission prompt was approved during these earlier checks.**
+
+- Scope: Android Browser updater, private staging, OS installer sessions/callbacks,
+  Settings, tests and Android instructions. Service implementation, repository
+  identity, package IDs, signature binding permission and per-app authorization
+  were not changed. No production keys/secrets were read; nothing was committed,
+  pushed or published.
+- Test-first logs retained under ignored `build/update-validation/`: discovery,
+  downloads, policy, installer/controller/Settings integration, cancellation,
+  metadata hardening, signer error, and the real silent-refresh/cancel race. The
+  latter reproduced an owned session surviving cancellation, then passed after
+  cancellation cleanup was moved to the operation's finalization boundary.
+- Read-only Music updater reference and official Android API documentation/source
+  informed the implementation. Real API-29 tests caught two issues invisible to
+  JVM seams: canonical `/data/user/0` versus `/data/data` staging paths, and the
+  archive parser requiring `GET_SIGNATURES` to collect modern signing info.
+  Fixed without accepting historical keys or weakening path checks. OS session
+  abandonment was observed to be asynchronous; tests poll exact owned IDs.
+
+Executed from the repository root after sourcing `/opt/data/tools/storage-env.sh`:
+
+```sh
+node --test tests/android-updates.test.mjs
+bash apps/android/build-update-fixtures.sh
+bash apps/android/gradlew -p apps/android \
+ :service:testDebugUnitTest :service:lintDebug :service:assembleDebug :service:assembleDebugAndroidTest \
+ :browser:testDebugUnitTest :browser:lintDebug :browser:assembleDebug :browser:assembleDebugAndroidTest \
+ :denied:assembleDebug :denied:assembleDebugAndroidTest --console=plain --max-workers=2
+bash apps/android/validate-device.sh emulator-5586
+bash -n apps/android/validate-device.sh apps/android/build-update-fixtures.sh
+```
+
+- Node source/integration guards: **3 pass**, no failures/skips. Browser JVM:
+  **15 pass**, Service JVM: **5 pass**, no failures/errors/skips in parsed JUnit XML.
+  Lint: Browser **0 errors, 21 warnings** (dependency/KTX/backup suggestions and
+  intentional synchronous durable preference writes); Service **0 errors, 4 warnings**.
+- Final build: `BUILD SUCCESSFUL in 6s`, **268 actionable tasks**. No missing-native
+  option or native rebuild was used; existing Android engine outputs were packaged.
+  SDK 36 `apksigner verify --verbose` accepted both actual product debug APKs;
+  `apkanalyzer` confirmed the unchanged package IDs and restored code **1**.
+- Product outputs remain `service/build/outputs/apk/debug/service-debug.apk` and
+  `browser/build/outputs/apk/debug/browser-debug.apk`, development-only, not release
+  artifacts. Instrumentation embeds explicitly labelled code-2 debug fixture APKs,
+  not production releases. Fixtures never install themselves.
+- Full final device script exit **0**. Exact logs were parsed: updater installer
+  **4**, updater Settings **3**, service Binder **8**, denied caller **1**, cold seed
+  **1**, cold verify **1**, same-client cold binding **1**, listing notice **2**,
+  Browser **2** — **23 passing executions**, no negative statuses/skips/crashes.
+  New cases exercise actual APK parsing, byte tamper/package mismatch, real atomic
+  session creation/cancellation, cancellation during silent refresh, foreign callback
+  rejection, persisted pending confirmation/abort results, recreated state with missing
+  files, real installed version labels, and opening the actual unknown-source Settings
+  page then returning **without granting approval**.
+- Earlier full and isolated runs hit the existing Service Binder assertion
+  `Service must close its owned read descriptor on timeout` at
+  `StorageBinderTest.kt:77`. The final full gate passed with that code unchanged.
+  This is an observed pre-existing intermittent gate failure, not a claimed updater
+  fix. Earlier failure logs are retained (`update-baseline-idle.log`,
+  `update-final-full-device.log` records the final pass). Separate remaining-gate
+  reruns also passed; they were not substituted for the final complete gate.
+- Task-owned runtime: `storage-updates-task29`, explicit **emulator-5586**, API 29,
+  software acceleration (`-accel off` because `/dev/kvm` is absent), 2 cores, 2048 MiB,
+  Vulkan disabled, **412×915 at density 160**. A first API-35 launch failed for absent
+  KVM; no other AVD or shared adb server was stopped or reset.
+- Actual Settings manually discovered public Android **0.1.7** despite a newer
+  Windows-only release. Download showed real combined byte progress, fetched both
+  published APKs (**17,752,637 bytes total**), and refused installation against the
+  differently signed installed debug products. Screenshots inspected directly:
+  `build/update-live-check.png`, `update-live-progress.png`, `update-live-download.png`.
+  No release-key material or account credentials were involved.
+- Final combined logs: `build/update-validation/update-final-build.log`,
+  `update-final-device.log` (focused **7**), `update-final-full-device.log` (full **23**).
+  Per-class logs and real fixture screenshots remain in `build/device-validation/`.
+
+Limits: OS-approved installation and Service repository/grant continuity through an
+actual upgrade still require a human-confirmed same-signer release/device exercise.
+The callback-persistence checks use synthetic result intents; real session creation
+and cancellation do not prove a completed Android install. API 26–28 staged
+Service-first policy is unit-tested, not runtime-tested here; API 31+ explicit
+`USER_ACTION_REQUIRED` also needs native acceptance. No physical phone, signing-key
+rotation, background automatic installation, or newly published updater-enabled
+release is claimed. Existing placeholder builds require one manual in-place upgrade.
+
 ## Release automation build-only validation — November 18, 2026
 
 - Added shared product `release.gradle` version/signing rules, Android-only native

@@ -69,6 +69,29 @@ test('Android installs both Rust targets explicitly before cross compilation', (
  assert.ok(install < android.indexOf('bash scripts/build-android-native.sh'));
 });
 
+test('Android CI runs Browser unit behavior tests before packaging updates', () => {
+ const android = job(workflow(), 'android');
+ assert.match(android, /:browser:testDebugUnitTest/);
+ assert.ok(android.indexOf(':browser:testDebugUnitTest') < android.indexOf('name: Build signed Android release installers'));
+});
+
+test('Android updater fixtures are built before instrumentation with the code-1 debug baseline', () => {
+ const android = job(workflow(), 'android');
+ const fixtures = android.indexOf('bash apps/android/build-update-fixtures.sh');
+ const testBuild = android.indexOf('name: Build native-containing test APKs, unit tests and lint');
+ assert.ok(fixtures >= 0 && fixtures < testBuild, 'Fresh runners need both code-2 debug fixture APKs before assembling instrumentation');
+ const command = android.split('\n').find(line => line.includes(':browser:testDebugUnitTest'));
+ assert.ok(command);
+ assert.doesNotMatch(command, /storageCommitCount|COMMIT_COUNT/, 'Fixture tests require code-1 products; release build separately embeds committed count');
+ assert.match(android, /:service:assembleRelease :browser:assembleRelease "-PstorageCommitCount=\$COMMIT_COUNT"/);
+});
+
+test('updater integration guards run in shared validation and Windows packaging', () => {
+ const text = workflow();
+ for (const platform of ['android', 'windows']) assert.match(job(text, 'validate'), new RegExp(`tests/${platform}-updates\\.test\\.mjs`));
+ assert.match(job(text, 'windows'), /tests\/windows-updates\.test\.mjs/);
+});
+
 test('Android overrides hosted-runner NDK defaults and exercises real signing refusals', () => {
  const android = job(workflow(), 'android');
  assert.ok(android.includes('ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865'));

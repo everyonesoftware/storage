@@ -27,9 +27,9 @@ The initial local vertical slice contains:
 - Local import, browsing, generated Attributes, version history, retrieval and reference-based Collections.
 - Tests of actual on-disk content, native ABI, service transport, denied callers and process restart.
 
-This is **not yet the distributed first release**. Pairing, cross-device metadata, replication, placement planning, pinning, saved Queries, production update feeds and signed production packaging are not implemented. Native Windows GUI launch still requires a Windows execution target; Linux compilation is not Windows runtime verification. Android emulator tests are not physical-phone acceptance.
+This is **not yet the distributed first release**. Pairing, cross-device metadata, replication, placement planning, pinning and saved Queries are not implemented. User-initiated in-app updating is implemented in the working tree for both native Browsers; see [application updates](contracts/application-updates.md) for the flow and acceptance boundaries. Existing placeholder builds need one manual in-place upgrade to the first updater-enabled release. Linux compilation is not Windows runtime verification, and Android emulator tests are not physical-phone acceptance.
 
-The initial Windows service denies unpackaged clients by default. Its explicitly hash-pinned development enrollment is documented in the Windows README; there is no production installer/package grant yet. Android product APKs use the development signing certificate in debug builds. No test Items are seeded into production startup.
+The Windows service denies unapproved clients by default. Installed first-party Browser consent and explicitly hash-pinned development enrollment are documented in the Windows README. Android product APKs use the development signing certificate in debug builds; published product APKs use the separate Storage release key. No test Items are seeded into production startup.
 
 ## Architecture and contracts
 

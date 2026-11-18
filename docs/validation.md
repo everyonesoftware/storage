@@ -1,5 +1,37 @@
 # Integrated local-slice validation
 
+## In-app updater integration — November 18, 2026
+
+The working tree implements user-initiated Windows and Android Settings updates;
+see [the update contract](../contracts/application-updates.md). Windows updater
+and existing transport/core harness passed **56 assertions**, and Service/WinUI
+cross-builds passed with zero warnings/errors. Cached package size/SHA-256 is
+checked after download and before restart; corrupt cache rejection and fresh
+retry were executed. This is not native Windows installed-upgrade acceptance.
+
+Android's final native-containing build/unit/lint gate passed; parent parsed
+**23 Browser + 5 Service JVM tests**, with no failures/errors/skips. The owned
+API-29 device gate passed **31 executions**. Actual Settings and OS confirmations
+upgraded debug Service first and Browser second from code 1 to code 2. Decline/retry,
+pending-consent process death, cold repository identity/byte continuity and
+Browser-grant continuity were exercised. Parent verified installed APK hashes
+against final fixtures and byte-identical identity snapshots. Full disclosures
+and retained failed atomic-path evidence are in
+[Android validation](../apps/android/VALIDATION.md).
+
+The final parent-run Node release/workflow/updater suite, including real Gradle
+release-refusal tests, passed with no skips. Pinned workflow lint and diff checks
+passed. Rust workspace tests, formatting, warnings-denied Clippy and five C ABI
+tests passed during this task. Later Windows tray/activation changes appeared
+in the shared checkout and were preserved; the full Node suite includes their
+guards, but this updater task does not claim their native acceptance.
+
+Remaining updater acceptance: real installed Windows upgrade/restart, Android
+API 26/API 31+ and physical hardware. No updater-enabled release was published;
+existing placeholder versions need one manual in-place upgrade after publication.
+
+## Earlier local-slice evidence
+
 Verified on November 17, 2026 in `/opt/data/code/storage`. These are actual parent-run integration gates after the independent-review fixes, not the earlier worker source-only builds. This is not full first-release acceptance.
 
 ## Results

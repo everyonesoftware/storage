@@ -3,6 +3,8 @@ using Storage.Service;
 using System.Text;
 using System.Text.Json;
 
+await Storage.Update.Tests.UpdateTestSuite.Run();
+
 static void Check(bool value, string name) { if (!value) throw new Exception("FAIL " + name); Console.WriteLine("PASS " + name); }
 string xaml = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "BrowserSource/Shell.xaml"));
 var shell = System.Xml.Linq.XDocument.Parse(xaml);

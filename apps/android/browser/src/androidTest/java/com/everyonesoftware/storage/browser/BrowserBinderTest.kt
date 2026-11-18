@@ -53,7 +53,8 @@ class BrowserBinderTest {
   compose.onNodeWithText("Queries").performClick()
   compose.onNodeWithText("Saved queries are not implemented in this local slice.").assertIsDisplayed()
   compose.onNodeWithText("Settings").performClick()
-  compose.onNodeWithText("Check for updates").performClick()
-  compose.onNodeWithText("Update checking is not configured: no published Android release feed.").assertIsDisplayed()
+  compose.waitUntil(10_000) { compose.onAllNodesWithText("Service 0.1.0 (1)").fetchSemanticsNodes().isNotEmpty() }
+  compose.onNodeWithText("Service 0.1.0 (1)").assertIsDisplayed()
+  compose.onNodeWithText("Check for updates").assertIsEnabled()
  }
 }

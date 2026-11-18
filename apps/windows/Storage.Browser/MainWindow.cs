@@ -16,6 +16,7 @@ public sealed partial class MainWindow : Window
 {
     private readonly Grid root;
     private readonly StorageClient client;
+    private readonly WindowsUpdatesPanel updates;
     private Item[] items = [];
     private Collection[] collections = [];
     private Item? selected;
@@ -71,7 +72,7 @@ public sealed partial class MainWindow : Window
         {
             if (e.ClickedItem is FrameworkElement { Tag: Collection collection }) await Run(async () => { filter = collection; SetPage("items"); await RefreshAsync(); });
         };
-        C<Button>("CheckUpdates").Click += (_, _) => C<TextBlock>("UpdateStatus").Text = "Update checking is not connected to the release feed yet. No network check was performed and no update was installed.";
+        updates = new WindowsUpdatesPanel(root, DispatcherQueue, PrepareUpdateRestartAsync);
         C<Grid>("BrowseHost").DragOver += (_, e) => { if (!busy && e.DataView.Contains(StandardDataFormats.StorageItems)) { e.AcceptedOperation = DataPackageOperation.Copy; e.DragUIOverride.Caption = "Import into Storage"; } };
         C<Grid>("BrowseHost").Drop += async (_, e) =>
         {
@@ -89,9 +90,17 @@ public sealed partial class MainWindow : Window
             finally { deferral.Complete(); }
         };
         root.Loaded += async (_, _) => { if (!initialized) { initialized = true; await Run(RefreshAsync); } };
-        Closed += (_, _) => { lifetime.Cancel(); lifetime.Dispose(); };
+        Closed += (_, _) => { updates.Dispose(); lifetime.Cancel(); lifetime.Dispose(); };
         SetPage("items");
     }
+    private Task PrepareUpdateRestartAsync()
+    {
+        // No unsaved in-memory repository state: all mutations complete in the service.
+        // Refuse restart while any import/export/editor operation is active; never clear protected state.
+        if (busy) throw new InvalidOperationException("Wait for the local service operation to finish before restarting.");
+        return Task.CompletedTask;
+    }
+
     private async Task<Stream> ConnectAsync(CancellationToken token)
     {
         try { return await WindowsPeers.ConnectAsync(servicePath, token); }

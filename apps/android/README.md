@@ -95,7 +95,7 @@ real signature verification are separately recorded in `VALIDATION.md`.
 
 ## Device verification
 
-Use only an explicitly owned emulator; never adopt another task's device, start an emulator implicitly, or kill the shared adb server. The parent owns `emulator-5592` for this task; the Android worker does not operate it without delegation.
+Use only an explicitly owned emulator; never adopt another task's device, start an emulator implicitly, or kill the shared adb server. The updater validation used its own `storage-updates-task29` AVD at `emulator-5586`; the earlier `emulator-5592` target in historical records is not implicitly available to other tasks.
 
 After a **normal native-containing build**, the emulator owner can run:
 
@@ -119,12 +119,123 @@ The task API-29 image reports night mode locked off: `cmd uimode night yes` stil
 - Read authorization and hash verification happen in the core before the service returns a read-only descriptor. No internal content path is returned in public JSON. Core error messages are replaced with safe platform messages.
 - Argument JSON is bounded at 16 KiB; response JSON at 512 KiB. This local slice has bounded listings, not a production paging API. The Browser exposes actual `hasMore` flags for items, collection contents, collections and versions instead of treating partial results as complete; name search applies only to loaded items. Durable upload jobs/progress and quota scheduling remain future work.
 - Browser exports by copying the service descriptor into the user's chosen destination. “Export and open” opens that destination, not a repository path or a browser-hosted content engine.
-- Backup and device-transfer extraction are disabled; Android application isolation remains the boundary. No network permission is requested.
+- Backup and device-transfer extraction are disabled; Android application isolation remains the boundary. Only Browser requests network access, for the public release updater; Service still requests no network access in this local slice.
 
 ## UI scope
 
 Items have real loading/empty/error states, name search, adaptive grid/list, file import, attributes, immutable history, new-version import, current/historical export and export-and-open. Collections can be created, browsed and populated with references to existing items. Diagnostics show actual service health/counts/stable IDs. Light/dark follow the system.
 
-Saved Queries, pairing and replication are visibly not implemented. Settings has an explicit update-check action that reports the missing release feed, never a fabricated “up to date” result. Collection removal/deletion, rename and access-policy mutation exist in the service allowlist but are not exposed in this initial UI. This is not full first-release acceptance.
+Saved Queries, pairing and replication are visibly not implemented. Settings checks the public paginated GitHub release inventory for the Android publication, independently of Windows; see the update flow below. Collection removal/deletion, rename and access-policy mutation exist in the service allowlist but are not exposed in this initial UI. This is not full first-release acceptance.
 
-See `VALIDATION.md` for actual evidence and remaining gates.
+## Application updates
+
+Settings shows PackageManager's actual installed Browser and Service version names/codes.
+User flow: **Check for updates → Download update** (combined byte progress) → allow
+installs from Storage in Android Settings if necessary → **Install Service update**
+→ **Continue installation…** → Android's Service confirmation → return to Settings
+→ **Install Browser update** → **Continue installation…** → Android's Browser confirmation. No permission or install
+prompt is automatically approved. Check/download/install actions are serialized;
+cancellation and retries keep both installed packages and Service data intact.
+
+The credential-free client enumerates at most 20 pages of 100 public GitHub releases,
+ignores drafts/prereleases and releases without `storage-android-release.json`, and
+validates the highest numeric Android publication's complete three-file inventory.
+A corrupt present marker, failed request or incomplete pagination is an error, never
+an “up to date” result. Both versioned APKs are required. HTTPS origins/redirects,
+metadata sizes, download sizes/deadlines, SHA-256, exact package IDs/versions and
+current signing certificates are checked before OS-owned sessions are prepared.
+Installed versions may not be lowered. The installed Service/Browser signer must
+match, and each APK must match its installed product; signing-key rotation is not
+silently accepted. Android is the final cryptographic/install-policy authority.
+
+All supported Android versions (API 26+) use one public, user-confirmed package
+session at a time: **Service first, then Browser**. Browser is not eligible until
+PackageManager observes Service at the selected version with the verified installed
+signing identity. Returning from Service installation refreshes both real versions
+and exposes a separate Browser action; it never automatically installs Browser.
+Expect two OS confirmations when both products need updating. Equal-version
+components are verified but not reinstalled. Download metadata and OS session IDs
+are private durable state; Activity recreation does not cancel process-owned work.
+After process death, incomplete files are not trusted: retry downloads both from
+the start, and cached complete pairs are revalidated before use. Pending Android
+confirmation and installer results survive controller recreation. No automatic
+startup install, repository read, uninstall, data clear, credential or service grant
+change is part of updating.
+
+Older published builds with placeholder Settings need **one manual in-place upgrade**
+to an updater-enabled release, using both APKs signed with their existing identity.
+Debug APKs cannot update to a differently signed release; never uninstall Service
+or clear its data as a workaround. This implementation is not itself publication.
+
+### Updater instrumentation fixtures
+
+Before running `validate-device.sh`, generate the explicit **test-only debug APKs**:
+
+```sh
+source /opt/data/tools/storage-env.sh
+bash apps/android/build-update-fixtures.sh
+bash apps/android/validate-device.sh <task-owned-serial>
+```
+
+The helper builds code-2 debug Service/Browser APKs into ignored
+`browser/build/update-fixtures/updates/`, embeds those files only in the instrumentation
+APK, then restores normal code-1 product outputs. It never builds/releases with a
+production key, installs packages, or approves OS prompts. Do not run Gradle clean
+between fixture generation and instrumentation packaging. New exact expected counts:
+updater installer **4**, updater Settings **4**, updater restart/real commit **5**,
+Browser-UID continuity seed **1** and cold verify **1**, plus the existing **16** tests
+(**31** total). The phased continuity test imports and reads a test-only 65,539-byte
+fixture through real Binder, persisting the actual store/device/version IDs for
+verification after each separately OS-approved installation.
+The Settings permission test opens the real per-source Android Settings page and
+returns without granting it; real install acceptance remains a separately user-confirmed
+device gate. See `VALIDATION.md` for the observed pre-existing Service-test flake,
+the final full passing gate, and separate updater/runtime results.
+
+Official API references checked for this implementation: Android
+`PackageInstaller.SessionParams` (standalone, API 26+),
+`SessionParams.setRequireUserAction` (API 31), `Session.commit`,
+`STATUS_PENDING_USER_ACTION`, `PackageManager.canRequestPackageInstalls`, and
+`Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES`. The API-29 archive parser also needs
+`GET_SIGNATURES` alongside `GET_SIGNING_CERTIFICATES` to collect certificates;
+verification still compares current `apkContentsSigners`, not signing history.
+
+### Sequential native acceptance
+
+The final source was rebuilt into code-2 debug fixtures, then into normal code-1
+products. `build/update-validation/sequential/final2-full-build.log` records the
+full product/JVM/lint build; `final2-device-gate.log` passed all 31 exact-count tests
+on the task-owned API-29 emulator. Browser JVM: 23 tests; Service JVM: 5 tests,
+with no failures/errors/skips. Node updater guards: 8 passing. Red evidence includes
+`policy-red.log`, `identities-red.log`, `equal-version-red.log` and source/count
+regressions; the original real atomic OS-commit failure is retained separately in
+`../review-final-atomic-commit-red.log` relative to this evidence directory.
+
+`build/update-validation/sequential/os-final/` retains inspected screenshots, real
+OS journals/package dumps, installed-APK hashes, post-upgrade cold/Binder logs and
+`verified-result.json`. Actual Settings and OS UI upgraded **Service 1→2**, then
+**Browser 1→2**, with a real Service decline/retry and Browser process death while
+Service consent was pending. After each successful step, Service cold verification
+and Browser-UID reads returned the original exact 65,539 bytes with unchanged real
+store/device IDs. Pulled installed APK hashes exactly match the final code-2 fixtures.
+No install/download action is offered once both installed products match.
+
+This is a **debug-fixture emulator acceptance**, not publication or public-download
+acceptance: fixture bytes and synthetic release metadata were staged in Browser's
+private directory using `run-as`; production archive/hash/signer validation and the
+actual Settings controller/session path were then used. Source permission and OS
+install consent were explicitly clicked in the real UI for these same-debug-signer
+fixtures. Automated pending-consent tests temporarily set the owned source app-op
+only to exercise real commit/recovery; they never approve installation and are not
+upgrade proof. A pre-publication failed atomic attempt's journal was preserved in
+`legacy-atomic-journal.xml` and renamed on this test AVD to isolate the sequential
+tests; its stranded OS children were not silently swept. No Service data was cleared.
+An intermediate successful run was restored to code-1 via debug-only `adb install
+-r -d` solely as test setup for the final-source rerun; the final recorded upgrades
+were performed through the actual OS UI, not adb replacement.
+
+API-26, API-31+ and physical-phone runtime acceptance remain separate unverified
+gates. The policy JVM tests cover API 26/28/29/31/36, not native execution on those
+other OS versions. No production key, publication, repository migration, frozen
+Binder protocol change, uninstall or automatic Browser installation was involved.
+See `VALIDATION.md` for the parent-owned validation summary and remaining gates.
