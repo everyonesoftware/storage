@@ -9,9 +9,10 @@ const repository = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 function sdkTools() {
   const sdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT;
   if (!sdk) throw new Error('Set ANDROID_HOME or ANDROID_SDK_ROOT for APK verification tools');
-  const builds = join(sdk, 'build-tools');
-  const versions = readdirSync(builds).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-  const apksigner = versions.map(v => join(builds, v, 'apksigner')).find(existsSync);
+  // Match the workflow pin: emulator setup may install newer build-tools whose
+  // certificate report format differs. Never silently select or fall back to it.
+  const apksigner = join(sdk, 'build-tools', '36.0.0', 'apksigner');
+  if (!existsSync(apksigner)) throw new Error('Android SDK build-tools 36.0.0 apksigner is required');
   const commands = join(sdk, 'cmdline-tools');
   const candidates = existsSync(commands) ? readdirSync(commands).sort((a, b) => b.localeCompare(a, undefined, { numeric: true })) : [];
   const apkanalyzer = [join(commands, 'latest', 'bin', 'apkanalyzer'), ...candidates.map(v => join(commands, v, 'bin', 'apkanalyzer')), join(sdk, 'tools', 'bin', 'apkanalyzer')].find(existsSync);
@@ -30,8 +31,13 @@ export async function packageAndroid({ root = repository, version, directory, ru
     const source = join(root, `apps/android/${app}/build/outputs/apk/release/${app}-release.apk`);
     if (!lstatSync(source).isFile() || lstatSync(source).isSymbolicLink()) throw new Error(`Expected a regular signed ${app} release APK`);
     const certificate = run(tools.apksigner, ['verify', '--verbose', '--print-certs', source]);
-    const digests = [...certificate.matchAll(/^Signer #\d+ certificate SHA-256 digest: ([a-fA-F0-9]{64})\s*$/gm)];
-    if (digests.length !== 1 || /(?:CN\s*=\s*Android Debug|Android Debug)/i.test(certificate)) throw new Error(`${app}: one non-debug release signer is required`);
+    // Accept only the pinned tool's single-signer report. Count all certificate
+    // identity records first so an unrecognized extra signer cannot be ignored.
+    const records = certificate.split(/\r?\n/).filter(line => /certificate (?:DN|SHA-256 digest):/.test(line));
+    const identities = records.filter(line => /^Signer #1 certificate DN: \S.*$/.test(line));
+    const digests = [...certificate.matchAll(/^Signer #1 certificate SHA-256 digest: ([a-fA-F0-9]{64})[ \t]*\r?$/gm)];
+    const counts = certificate.split(/\r?\n/).filter(line => line.startsWith('Number of signers:'));
+    if (records.length !== 2 || identities.length !== 1 || digests.length !== 1 || counts.some(line => line !== 'Number of signers: 1') || /(?:CN\s*=\s*Android Debug|Android Debug)/i.test(certificate)) throw new Error(`${app}: one non-debug release signer is required`);
     const signer = digests[0][1].toLowerCase();
     if (products.length && signer !== products[0].signer) throw new Error('Service and Browser release signers differ');
     const inspect = field => run(tools.apkanalyzer, ['manifest', field, source]).trim();

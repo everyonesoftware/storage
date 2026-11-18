@@ -99,8 +99,14 @@ try {
     if ((Test-Path -LiteralPath $profile) -or (Test-Path -LiteralPath $registry) -or (Test-Path (Join-Path $env:LOCALAPPDATA 'StorageWindows')) -or @(Get-StorageLinks).Count -or @(Get-Process -Name Storage.Browser,Storage.Service -ErrorAction SilentlyContinue).Count) { throw 'Existing Storage installation/profile/process: refusing to alter personal repositories or other tasks' }
     $installer=(Resolve-Path -LiteralPath $InstallerPath).Path
     Add-Type -AssemblyName System.Windows.Forms,System.Drawing
-    $wpf=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/WPF'
-    Add-Type -Path (Join-Path $wpf 'UIAutomationClient.dll'),(Join-Path $wpf 'UIAutomationTypes.dll')
+    # PowerShell ships the UIA assemblies matching its own modern .NET runtime.
+    # Mixing Framework 4.x assemblies with pwsh's client-side provider causes
+    # UIAutomationTypes version-binding failures when RootElement is accessed.
+    foreach($name in @('UIAutomationTypes','UIAutomationProvider','UIAutomationClient','UIAutomationClientSideProviders')) {
+        Add-Type -Path (Join-Path $PSHOME "$name.dll")
+    }
+    # Resolve the actual provider before installing or launching anything.
+    $null=[Windows.Automation.AutomationElement]::RootElement
     Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;

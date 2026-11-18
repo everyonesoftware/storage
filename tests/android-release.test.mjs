@@ -62,6 +62,48 @@ test('Gradle rejects partial signing, missing keystore, absent count and invalid
   } finally { rmSync(fixture, { recursive: true, force: true }); }
 });
 
+test('Android packager requires pinned build-tools 36.0.0 despite newer installed tools', async () => {
+  const { packageAndroid } = await import('../scripts/package-android.mjs');
+  const fixture = mkdtempSync(join(scratch, 'storage-android-sdk-test-'));
+  const oldHome = process.env.ANDROID_HOME;
+  const oldRoot = process.env.ANDROID_SDK_ROOT;
+  try {
+    const sdk = join(fixture, 'sdk');
+    for (const version of ['35.0.0', '36.0.0', '36.1.0', '37.0.0']) {
+      mkdirSync(join(sdk, 'build-tools', version), { recursive: true });
+      writeFileSync(join(sdk, 'build-tools', version, 'apksigner'), 'tool-selection fixture only');
+    }
+    mkdirSync(join(sdk, 'cmdline-tools/latest/bin'), { recursive: true });
+    writeFileSync(join(sdk, 'cmdline-tools/latest/bin/apkanalyzer'), 'tool-selection fixture only');
+    for (const app of ['service', 'browser']) {
+      const output = join(fixture, `apps/android/${app}/build/outputs/apk/release`);
+      mkdirSync(output, { recursive: true });
+      writeFileSync(join(output, `${app}-release.apk`), 'tool-selection fixture, not an APK');
+    }
+    process.env.ANDROID_HOME = sdk;
+    delete process.env.ANDROID_SDK_ROOT;
+    const stop = new Error('stop after observing selected signer');
+    const run = (tool) => {
+      assert.equal(tool, join(sdk, 'build-tools/36.0.0/apksigner'));
+      throw stop;
+    };
+    await assert.rejects(packageAndroid({ root: fixture, version: '0.1.7', directory: join(fixture, 'out'), run }), error => error === stop);
+    rmSync(join(sdk, 'build-tools/36.0.0'), { recursive: true });
+    let called = false;
+    await assert.rejects(packageAndroid({ root: fixture, version: '0.1.7', directory: join(fixture, 'missing-pin'), run: () => { called = true; } }), /build-tools 36\.0\.0.*required/);
+    assert.equal(called, false, 'Missing pinned tool must not fall back to another installed signer');
+    assert.equal(existsSync(join(fixture, 'out')), false);
+    assert.equal(existsSync(join(fixture, 'missing-pin')), false);
+    delete process.env.ANDROID_HOME;
+    process.env.ANDROID_SDK_ROOT = sdk;
+    await assert.rejects(packageAndroid({ root: fixture, version: '0.1.7', directory: join(fixture, 'fallback-root'), run }), /build-tools 36\.0\.0.*required/);
+  } finally {
+    if (oldHome === undefined) delete process.env.ANDROID_HOME; else process.env.ANDROID_HOME = oldHome;
+    if (oldRoot === undefined) delete process.env.ANDROID_SDK_ROOT; else process.env.ANDROID_SDK_ROOT = oldRoot;
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
 test('Android packager verifies both release identities before copying exact names', async () => {
   assert.ok(existsSync(join(root, 'scripts/package-android.mjs')), 'Android release packager is implemented');
   const { packageAndroid } = await import('../scripts/package-android.mjs');
@@ -88,6 +130,14 @@ test('Android packager verifies both release identities before copying exact nam
     const negatives = [
       ['mismatched-signers', (tool, args, text) => tool === 'signer' && args.at(-1).includes('/browser/') ? text.replace('a'.repeat(64), 'b'.repeat(64)) : text, /signers differ/],
       ['debug-signer', (tool, args, text) => tool === 'signer' ? text.replace('CN=Storage release test', 'CN=Android Debug') : text, /non-debug release signer/],
+      ['debug-signer-case-spacing', (tool, args, text) => tool === 'signer' ? text.replace('CN=Storage release test', 'CN = android debug, O=Android') : text, /non-debug release signer/],
+      ['missing-signer', (tool, args, text) => tool === 'signer' ? 'Verifies\nNumber of signers: 0\n' : text, /non-debug release signer/],
+      ['multiple-signers', (tool, args, text) => tool === 'signer' ? text + text.replaceAll('#1', '#2').replaceAll('a'.repeat(64), 'b'.repeat(64)) : text, /non-debug release signer/],
+      ['malformed-digest', (tool, args, text) => tool === 'signer' ? text.replace('a'.repeat(64), 'a'.repeat(63)) : text, /non-debug release signer/],
+      ['new-format-only', (tool, args, text) => tool === 'signer' ? text.replaceAll('Signer #1', 'V2 Signer:') : text, /non-debug release signer/],
+      ['residual-new-format-signer', (tool, args, text) => tool === 'signer' ? text + text.replaceAll('Signer #1', 'V2 Signer:').replaceAll('a'.repeat(64), 'b'.repeat(64)) : text, /non-debug release signer/],
+      ['missing-certificate-identity', (tool, args, text) => tool === 'signer' ? text.split('\n').slice(1).join('\n') : text, /non-debug release signer/],
+      ['inconsistent-signer-count', (tool, args, text) => tool === 'signer' ? 'Number of signers: 2\n' + text : text, /non-debug release signer/],
       ['wrong-version', (tool, args, text) => args[1] === 'version-name' ? '0.1.8' : text, /wrong APK release version/],
       ['wrong-package', (tool, args, text) => args[1] === 'application-id' ? 'unrelated.application' : text, /wrong application ID/],
       ['missing-native', (tool, args, text) => args[0] === 'files' && args.at(-1).includes('/service/') ? text.split('\n').slice(1).join('\n') : text, /native ABI inventory/],
@@ -95,7 +145,7 @@ test('Android packager verifies both release identities before copying exact nam
     ];
     for (const [name, alter, expected] of negatives) {
       const rejectedDirectory = join(fixture, name);
-      await assert.rejects(packageAndroid({ root: fixture, version: '0.1.7', directory: rejectedDirectory, run: (tool, args) => alter(tool, args, run(tool, args)), tools: { apksigner: 'signer', apkanalyzer: 'analyzer' } }), expected);
+      await assert.rejects(packageAndroid({ root: fixture, version: '0.1.7', directory: rejectedDirectory, run: (tool, args) => alter(tool, args, run(tool, args)), tools: { apksigner: 'signer', apkanalyzer: 'analyzer' } }), expected, name);
       assert.equal(existsSync(rejectedDirectory), false, 'Invalid pair must not create publishable-looking output');
     }
   } finally { rmSync(fixture, { recursive: true, force: true }); }

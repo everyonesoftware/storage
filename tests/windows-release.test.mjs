@@ -92,3 +92,12 @@ test('native uninstall exercises the hook with the approved service still runnin
  assert.ok(source.indexOf('$summary.uninstallStartedWithRunningService=$true') < source.indexOf("'uninstall' 40"));
  assert.match(source, /Expected one healthy task-owned service before uninstall/);
 });
+
+test('UI Automation uses the matching PowerShell runtime assemblies before installation', () => {
+ const source = read('scripts/test-windows-installer.ps1');
+ assert.doesNotMatch(source, /Framework64\/v4\.0\.30319/);
+ assert.match(source, /Join-Path \$PSHOME/);
+ for (const name of ['UIAutomationTypes', 'UIAutomationProvider', 'UIAutomationClient', 'UIAutomationClientSideProviders']) assert.ok(source.includes(`'${name}'`));
+ const preflight = source.indexOf('$null=[Windows.Automation.AutomationElement]::RootElement');
+ assert.ok(preflight >= 0 && preflight < source.indexOf('$mutated=$true'));
+});
