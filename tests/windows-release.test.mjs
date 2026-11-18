@@ -106,6 +106,7 @@ test('consent capability routing uses the real helper and fails closed on provid
  $script:events=[Collections.Generic.List[string]]::new()
  function Assert-OwnedConsentTarget { $script:events.Add('validate'); if($script:invalid){throw 'invalid target'} }
  function Get-LegacyConsentPattern { $script:events.Add('legacy-query'); if($script:legacyQueryError){throw 'legacy query failed'}; return $script:legacy }
+ function Invoke-NativeConsentButton { $script:events.Add('native-action'); if($script:actionError){throw 'action failed'} }
  $pattern=[pscustomobject]@{}
  $pattern | Add-Member ScriptMethod Invoke { $script:events.Add('invoke'); if($script:actionError){throw 'action failed'} }
  $legacyPattern=[pscustomobject]@{}
@@ -125,7 +126,7 @@ test('consent capability routing uses the real helper and fails closed on provid
  $script:invoke=$null
  if((Run-Case 'LegacyIAccessible') -ne 'validate,invoke-query,legacy-query,validate,legacy-action'){throw 'Unsupported Invoke must use Legacy default action'}
  $script:legacy=$null
- if((Run-Case '' 'No supported consent button action') -ne 'validate,invoke-query,legacy-query'){throw 'Unsupported target must not activate'}
+ if((Run-Case 'NativeButtonClick') -ne 'validate,invoke-query,legacy-query,native-action'){throw 'Absent UIA patterns must use the validated native Button route'}
  $script:invalid=$true
  if((Run-Case '' 'invalid target') -ne 'validate'){throw 'Invalid target queried/activated'}
  $script:invalid=$false; $script:queryError=$true
@@ -136,10 +137,61 @@ test('consent capability routing uses the real helper and fails closed on provid
  if((Run-Case '' 'action failed') -ne 'validate,invoke-query,validate,invoke'){throw 'Failed Invoke must not cause duplicate activation'}
  $script:invoke=$null; $script:legacy=$legacyPattern
  if((Run-Case '' 'action failed') -ne 'validate,invoke-query,legacy-query,validate,legacy-action'){throw 'Failed Legacy must fail closed'}
+ $script:legacy=$null
+ if((Run-Case '' 'action failed') -ne 'validate,invoke-query,legacy-query,native-action'){throw 'Failed native action must not retry'}
  Write-Output 'CONSENT_ROUTING_PASSED'
  `);
  assert.equal(result.status,0,result.stdout+result.stderr);
  assert.match(result.stdout,/CONSENT_ROUTING_PASSED/);
+});
+
+test('native consent activation requires foreground, responsiveness and fresh ownership', () => {
+ const result=ps(`
+ $ErrorActionPreference='Stop'; Set-StrictMode -Version Latest
+ $tokens=$null; $errors=$null
+ $ast=[Management.Automation.Language.Parser]::ParseFile('./scripts/test-windows-installer.ps1',[ref]$tokens,[ref]$errors)
+ $function=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Invoke-NativeConsentButton'},$true)
+ if(-not $function){throw 'Missing native consent helper'}
+ Invoke-Expression $function.Extent.Text
+ Add-Type @'
+ using System;
+ namespace StorageSmoke {
+  public static class Native {
+   public static bool Ready=true, AllowForeground=true, FailClick=false;
+   public static IntPtr Foreground=IntPtr.Zero, Clicked=IntPtr.Zero;
+   public static int Clicks;
+   public static bool Responsive(IntPtr h) { return Ready; }
+   public static bool SetForegroundWindow(IntPtr h) { if(AllowForeground) Foreground=h; return AllowForeground; }
+   public static IntPtr GetForegroundWindow() { return Foreground; }
+   public static void ClickConsentButton(IntPtr dialog,IntPtr button) { Clicks++; Clicked=button; if(FailClick) throw new InvalidOperationException("native action failed"); }
+  }
+ }
+'@
+ $dialog=[pscustomobject]@{Current=[pscustomobject]@{NativeWindowHandle=100}}
+ $yes=[pscustomobject]@{Current=[pscustomobject]@{NativeWindowHandle=101}}
+ $script:validations=0; $script:rejectAt=0
+ function Assert-OwnedConsentTarget { $script:validations++; if($script:validations -eq $script:rejectAt){throw 'invalid ownership'} }
+ function Run-Case($expected='') {
+  $script:validations=0; [StorageSmoke.Native]::Clicks=0; [StorageSmoke.Native]::Foreground=[IntPtr]::Zero
+  $caught=''; try {Invoke-NativeConsentButton $dialog $yes 'no' 42} catch {$caught=$_.ToString()}
+  if($expected){if($caught -notlike ('*'+$expected+'*')){throw ('Wrong rejection: '+$caught)}} elseif($caught){throw $caught}
+ }
+ Run-Case
+ if([StorageSmoke.Native]::Clicks -ne 1 -or [StorageSmoke.Native]::Clicked -ne 101 -or $script:validations -lt 2){throw 'Expected one exact button activation after revalidation'}
+ $script:rejectAt=1; Run-Case 'invalid ownership'
+ if([StorageSmoke.Native]::Clicks){throw 'Invalid owner activated'}
+ $script:rejectAt=2; Run-Case 'invalid ownership'
+ if([StorageSmoke.Native]::Clicks){throw 'Stale owner activated'}
+ $script:rejectAt=0; [StorageSmoke.Native]::Ready=$false; Run-Case 'hung'
+ if([StorageSmoke.Native]::Clicks){throw 'Hung dialog activated'}
+ [StorageSmoke.Native]::Ready=$true; [StorageSmoke.Native]::AllowForeground=$false; Run-Case 'foreground'
+ if([StorageSmoke.Native]::Clicks){throw 'Inactive dialog activated'}
+ [StorageSmoke.Native]::AllowForeground=$true; [StorageSmoke.Native]::FailClick=$true; Run-Case 'native action failed'
+ if([StorageSmoke.Native]::Clicks -ne 1){throw 'Native action retried after failure'}
+ Write-Output 'NATIVE_CONSENT_GUARDS_PASSED'
+ `);
+ assert.equal(result.status,0,result.stdout+result.stderr);
+ assert.match(result.stdout,/NATIVE_CONSENT_GUARDS_PASSED/);
 });
 
 test('consent ownership accepts native Buttons reported as UIA Panes but rejects unsafe targets', () => {

@@ -93,6 +93,18 @@ function Get-LegacyConsentPattern($Button) {
     # LegacyIAccessible is a native UIA pattern, not a managed InvokePattern.
     [StorageSmoke.LegacyAction]::FromHandle([IntPtr]::new($Button.Current.NativeWindowHandle))
 }
+function Invoke-NativeConsentButton($Dialog, $Yes, $No, [int]$ServiceProcessId) {
+    Assert-OwnedConsentTarget $Dialog $Yes $No $ServiceProcessId
+    $dialogHandle=[IntPtr]::new($Dialog.Current.NativeWindowHandle)
+    $buttonHandle=[IntPtr]::new($Yes.Current.NativeWindowHandle)
+    if (-not [StorageSmoke.Native]::Responsive($dialogHandle)) { throw 'Consent dialog is hung' }
+    # BM_CLICK requires an active dialog. Foregrounding is not an activation retry.
+    # https://learn.microsoft.com/windows/win32/controls/bm-click
+    $null=[StorageSmoke.Native]::SetForegroundWindow($dialogHandle)
+    if ([StorageSmoke.Native]::GetForegroundWindow() -ne $dialogHandle) { throw 'Cannot foreground the owned consent dialog' }
+    Assert-OwnedConsentTarget $Dialog $Yes $No $ServiceProcessId
+    [StorageSmoke.Native]::ClickConsentButton($dialogHandle,$buttonHandle)
+}
 function Invoke-OwnedConsentButton($Dialog, $Yes, $No, [int]$ServiceProcessId) {
     Assert-OwnedConsentTarget $Dialog $Yes $No $ServiceProcessId
     $pattern=$null
@@ -105,7 +117,12 @@ function Invoke-OwnedConsentButton($Dialog, $Yes, $No, [int]$ServiceProcessId) {
     # Only unsupported capability falls back. Stale elements, provider failures
     # and action errors propagate: never risk a second activation after a failure.
     $legacy=Get-LegacyConsentPattern $Yes
-    if ($null -eq $legacy) { throw 'No supported consent button action (InvokePattern/LegacyIAccessible)' }
+    if ($null -eq $legacy) {
+        # A real native Button can have neither UIA action on the hosted runner.
+        # Only capability absence reaches this route; provider/action errors do not.
+        Invoke-NativeConsentButton $Dialog $Yes $No $ServiceProcessId
+        return 'NativeButtonClick'
+    }
     try {
         Assert-OwnedConsentTarget $Dialog $Yes $No $ServiceProcessId
         $legacy.DoDefaultAction()
@@ -269,6 +286,15 @@ namespace StorageSmoke {
    return new ConsentWindow {Handle=h.ToInt64(),Parent=GetParent(h).ToInt64(),ProcessId=pid,ControlId=GetDlgCtrlID(h),Exists=IsWindow(h),Enabled=IsWindowEnabled(h),Visible=IsWindowVisible(h),ClassName=cls.ToString(),Title=title.ToString()};
   }
   public static bool Responsive(IntPtr h) { UIntPtr r; return SendMessageTimeout(h,0,UIntPtr.Zero,IntPtr.Zero,2,1000,out r)!=IntPtr.Zero; }
+  public static void ClickConsentButton(IntPtr dialog,IntPtr button) {
+   if(dialog==IntPtr.Zero || button==IntPtr.Zero) throw new InvalidOperationException("Missing consent HWND");
+   if(GetForegroundWindow()!=dialog) throw new InvalidOperationException("Owned consent dialog lost foreground");
+   // BM_CLICK=0x00F5. Check delivery, not the message result (which is void).
+   // A timeout may already have delivered the click: propagate and never retry.
+   UIntPtr result;
+   if(SendMessageTimeout(button,0x00F5,UIntPtr.Zero,IntPtr.Zero,2,2000,out result)==IntPtr.Zero)
+    throw new InvalidOperationException("Native consent click failed or timed out; activation will not be retried");
+  }
  }
 }
 '@
