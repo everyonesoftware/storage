@@ -142,7 +142,7 @@ test('consent capability routing uses the real helper and fails closed on provid
  assert.match(result.stdout,/CONSENT_ROUTING_PASSED/);
 });
 
-test('consent ownership rejects mismatched, disabled and non-button targets before activation', () => {
+test('consent ownership accepts native Buttons reported as UIA Panes but rejects unsafe targets', () => {
  const result=ps(`
  $ErrorActionPreference='Stop'; Set-StrictMode -Version Latest
  $tokens=$null; $errors=$null
@@ -164,6 +164,10 @@ test('consent ownership rejects mismatched, disabled and non-button targets befo
   102=@{Handle=102;Exists=$true;ProcessId=42;Parent=100;ClassName='Button';ControlId=7;Enabled=$true;Visible=$true;Title='No'}
  }
  Assert-OwnedConsentTarget $dialog $yes $no 42
+ # Captured hosted Windows representation: UIA Pane, native Button, matching HWND/PID/parent/ID.
+ $yes.Current.ControlType.ProgrammaticName='ControlType.Pane'
+ $no.Current.ControlType.ProgrammaticName='ControlType.Pane'
+ Assert-OwnedConsentTarget $dialog $yes $no 42
  function Must-Reject([scriptblock]$change,[scriptblock]$restore) {
   & $change; $rejected=$false
   try {Assert-OwnedConsentTarget $dialog $yes $no 42} catch {$rejected=$true} finally {& $restore}
@@ -178,7 +182,8 @@ test('consent ownership rejects mismatched, disabled and non-button targets befo
   $id=$button.Current.AutomationId
   Must-Reject {$button.Current.AutomationId='8'} {$button.Current.AutomationId=$id}
   Must-Reject {$button.Current.IsEnabled=$false} {$button.Current.IsEnabled=$true}
-  Must-Reject {$button.Current.ControlType.ProgrammaticName='ControlType.Text'} {$button.Current.ControlType.ProgrammaticName='ControlType.Button'}
+  $controlType=$button.Current.ControlType.ProgrammaticName
+  Must-Reject {$button.Current.ControlType.ProgrammaticName='ControlType.Text'} {$button.Current.ControlType.ProgrammaticName=$controlType}
   Must-Reject {$button.Current.NativeWindowHandle=0} {$button.Current.NativeWindowHandle=100+[int]$id-5}
  }
  foreach($handle in @(100,101,102)) {

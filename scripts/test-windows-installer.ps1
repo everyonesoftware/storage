@@ -82,7 +82,9 @@ function Assert-OwnedConsentTarget($Dialog, $Yes, $No, [int]$ServiceProcessId) {
     if (-not $Dialog.Current.NativeWindowHandle -or -not $dialogWindow.Exists -or $dialogWindow.Handle -ne $Dialog.Current.NativeWindowHandle -or $dialogWindow.ProcessId -ne $ServiceProcessId -or $dialogWindow.ClassName -cne '#32770' -or $dialogWindow.Title -cne $title -or -not $dialogWindow.Enabled -or -not $dialogWindow.Visible) { throw 'Invalid native service consent dialog' }
     foreach ($entry in @(@{button=$Yes;id=6},@{button=$No;id=7})) {
         $button=$entry.button; $id=$entry.id
-        if (-not $button -or $button.Current.ProcessId -ne $ServiceProcessId -or $button.Current.AutomationId -cne [string]$id -or $button.Current.ControlType.ProgrammaticName -cne 'ControlType.Button' -or -not $button.Current.IsEnabled -or -not $button.Current.NativeWindowHandle) { throw 'Invalid service-owned Yes/No UIA button' }
+        # The hosted runner exposes these native MessageBox Buttons as UIA Panes.
+        # Accept that proxy representation only with every native Button check below.
+        if (-not $button -or $button.Current.ProcessId -ne $ServiceProcessId -or $button.Current.AutomationId -cne [string]$id -or $button.Current.ControlType.ProgrammaticName -cnotin @('ControlType.Button','ControlType.Pane') -or -not $button.Current.IsEnabled -or -not $button.Current.NativeWindowHandle) { throw 'Invalid service-owned Yes/No UIA button' }
         $native=Get-ConsentWindowFacts $button
         if (-not $native.Exists -or $native.Handle -ne $button.Current.NativeWindowHandle -or $native.ProcessId -ne $ServiceProcessId -or $native.Parent -ne $dialogWindow.Handle -or $native.ClassName -cne 'Button' -or $native.ControlId -ne $id -or -not $native.Enabled -or -not $native.Visible) { throw 'Invalid native service-owned Yes/No button' }
     }
