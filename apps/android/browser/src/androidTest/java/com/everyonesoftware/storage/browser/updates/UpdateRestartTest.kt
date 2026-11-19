@@ -6,7 +6,6 @@ import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.File
-import java.security.MessageDigest
 
 /** Faults bypass Exception cleanup exactly where process death loses in-memory preparation state.
  * A fresh installer reads only durable preferences and Android's real sessions. Never approves consent.
@@ -28,7 +27,7 @@ class UpdateRestartTest {
   val release = AndroidRelease(2, listOf("Service", "Browser").map { name ->
    val file = File(installer.directory, "Storage-$name-0.1.2.apk")
    instrumentation.context.assets.open("updates/$name.apk").use { input -> file.outputStream().use { input.copyTo(it) } }
-   ReleaseFile(file.name, file.length(), ReleaseClient.hex(MessageDigest.getInstance("SHA-256").digest(file.readBytes())))
+   ReleaseFile(file.name, file.length(), fixtureSha256(file))
   } + ReleaseFile("Storage-android-SHA256SUMS", 1, "a".repeat(64)))
   val raw = org.json.JSONObject().put("schemaVersion", 1).put("platform", "android").put("signing", "release-key")
    .put("count", 2).put("version", "0.1.2").put("tag", "v0.1.2").put("sourceCommit", "a".repeat(40))

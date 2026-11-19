@@ -14,6 +14,7 @@ static class FeedTests
         var source = new WindowsGithubSource(download);
         var feed = await source.GetReleaseFeed(NullVelopackLogger.Instance, "StorageWindows", "win-x64");
         Require(feed.Assets.Length == 1 && feed.Assets[0].Version.ToString() == "0.1.20", "Select highest numeric platform publication across pages");
+        Require(source.GetOffer(feed.Assets[0]) == new WindowsUpdateOffer(new Version(0, 1, 20), new string('a', 40), feed.Assets[0].SHA256), "Offered changelog identity comes from validated platform manifest, not release tag");
         Require(download.Requests.Any(u => u.EndsWith("page=2")) && !download.Requests.Any(u => u.Contains("latest")), "Explicit pagination, never latest");
         string target = Path.Combine(Path.GetTempPath(), "storage-update-test-" + Guid.NewGuid().ToString("N"));
         try

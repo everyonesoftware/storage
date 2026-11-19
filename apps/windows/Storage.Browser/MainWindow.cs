@@ -159,7 +159,12 @@ public sealed partial class MainWindow : Window
     {
         page = target;
         C<TextBlock>("Heading").Text = target == "items" ? filter?.Name ?? "All items" : target == "collections" ? "Collections" : "Settings";
-        C<TextBlock>("Subtitle").Text = target switch { "items" => "Original content. Immutable history. Yours to keep.", "collections" => "Bring related items together.", _ => "Your local service and application." };
+        C<TextBlock>("Subtitle").Text = target switch { "items" => "Original content. Immutable history. Yours to keep.", "collections" => "Bring related items together.", _ => "" };
+        C<TextBlock>("Subtitle").Visibility = target == "settings" ? Visibility.Collapsed : Visibility.Visible;
+        Grid.SetColumnSpan(C<Grid>("WorkspaceContent"), target == "settings" ? 2 : 1);
+        C<Grid>("WorkspaceContent").RowSpacing = target == "settings" ? 0 : 18;
+        C<Border>("InspectorHost").Visibility = target == "settings" ? Visibility.Collapsed : Visibility.Visible;
+        C<TextBlock>("Status").Visibility = target == "settings" ? Visibility.Collapsed : Visibility.Visible;
         C<Grid>("BrowseHost").Visibility = target == "items" ? Visibility.Visible : Visibility.Collapsed;
         C<StackPanel>("CollectionsPanel").Visibility = target == "collections" ? Visibility.Visible : Visibility.Collapsed;
         C<ScrollViewer>("SettingsPanel").Visibility = target == "settings" ? Visibility.Visible : Visibility.Collapsed;
@@ -187,8 +192,21 @@ public sealed partial class MainWindow : Window
     }
     private async Task HealthAsync()
     {
-        var health = await client.HealthAsync(lifetime.Token);
-        C<TextBlock>("ServiceHealth").Text = $"Status: {health.Status}\nDevice: {health.DeviceId}\nData store: {health.DataStoreId}\n{health.ItemCount} items · {health.VersionCount} immutable versions\nLocal owner: local-owner";
+        C<TextBlock>("ServiceHealth").Text = "Connecting…";
+        C<TextBlock>("ServiceRepository").Text = "Unavailable";
+        C<TextBlock>("ServiceDetails").Text = "Device and data store IDs unavailable.";
+        try
+        {
+            var health = await client.HealthAsync(lifetime.Token);
+            C<TextBlock>("ServiceHealth").Text = health.Status == "healthy" ? "● Healthy" : health.Status;
+            C<TextBlock>("ServiceRepository").Text = $"{health.ItemCount} items · {health.VersionCount} immutable versions";
+            C<TextBlock>("ServiceDetails").Text = $"Device ID\n{health.DeviceId}\n\nData store ID\n{health.DataStoreId}";
+        }
+        catch
+        {
+            C<TextBlock>("ServiceHealth").Text = "Not connected";
+            throw;
+        }
     }
     private async Task LoadCollectionsAsync()
     {

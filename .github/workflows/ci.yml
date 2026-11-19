@@ -145,6 +145,7 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         env:
           COMMIT_COUNT: ${{ steps.version.outputs.count }}
+          SOURCE_COMMIT: ${{ steps.version.outputs.sha }}
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
           STORAGE_KEYSTORE_BASE64: ${{ secrets.STORAGE_KEYSTORE_BASE64 }}
           STORAGE_KEYSTORE_PASSWORD: ${{ secrets.STORAGE_KEYSTORE_PASSWORD }}
@@ -163,7 +164,7 @@ jobs:
           export STORAGE_KEYSTORE_PATH="$RUNNER_TEMP/storage-release.jks"
           trap 'rm -f "$STORAGE_KEYSTORE_PATH"' EXIT
           printf '%s' "$STORAGE_KEYSTORE_BASE64" | base64 --decode > "$STORAGE_KEYSTORE_PATH"
-          bash apps/android/gradlew -p apps/android :service:assembleRelease :browser:assembleRelease "-PstorageCommitCount=$COMMIT_COUNT" --no-daemon --max-workers=2
+          bash apps/android/gradlew -p apps/android :service:assembleRelease :browser:assembleRelease "-PstorageCommitCount=$COMMIT_COUNT" "-PstorageSourceCommit=$SOURCE_COMMIT" --no-daemon --max-workers=2
           node scripts/package-android.mjs --version "$RELEASE_VERSION" --directory dist/android
           node scripts/release.mjs manifest --platform android --directory dist/android
       - name: Retain Android test and GUI diagnostics

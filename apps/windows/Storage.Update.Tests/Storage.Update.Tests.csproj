@@ -3,6 +3,10 @@
   <ItemGroup>
     <Compile Include="../Storage.Browser/WindowsUpdateController.cs" Condition="Exists('../Storage.Browser/WindowsUpdateController.cs')" Link="WindowsUpdateController.cs" />
     <Compile Include="../Storage.Browser/WindowsUpdateBackend.cs" Condition="Exists('../Storage.Browser/WindowsUpdateBackend.cs')" Link="WindowsUpdateBackend.cs" />
+    <Compile Include="../Storage.Browser/WindowsChangelog.cs" Link="WindowsChangelog.cs" />
+    <Content Include="../Storage.Browser/Shell.xaml" Link="BrowserSource/Shell.xaml" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../Storage.Browser/MainWindow.cs" Link="BrowserSource/MainWindow.cs.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../Storage.Browser/WindowsUpdatesPanel.cs" Link="BrowserSource/WindowsUpdatesPanel.cs.txt" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="Velopack" Version="1.2.161" />
   </ItemGroup>
 </Project>

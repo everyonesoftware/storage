@@ -17,12 +17,15 @@ public sealed class WindowsGithubSource(IFileDownloader? downloader = null) : IU
     public const string PackageId = "StorageWindows";
     private readonly IFileDownloader downloader = downloader ?? new PublicUpdateDownloader();
     private readonly Dictionary<VelopackAsset, string> downloads = [];
+    private readonly Dictionary<VelopackAsset, WindowsUpdateOffer> offers = [];
+    public WindowsUpdateOffer? GetOffer(VelopackAsset asset) => offers.GetValueOrDefault(asset);
     private static Dictionary<string, string> Headers => new() { ["Accept"] = "application/vnd.github+json", ["User-Agent"] = "StorageWindows-Updater" };
 
     public async Task<VelopackAssetFeed> GetReleaseFeed(IVelopackLogger logger, string? appId, string channel, Guid? stagingId = null, VelopackAsset? latestLocalRelease = null)
     {
         if (channel != Channel || appId is not null && appId != PackageId) throw new InvalidDataException("Unexpected Windows update identity.");
         downloads.Clear();
+        offers.Clear();
         var candidates = new List<(Version Version, JsonElement Release)>();
         var tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (int page = 1; page <= 10; page++)
@@ -75,6 +78,7 @@ public sealed class WindowsGithubSource(IFileDownloader? downloader = null) : IU
                 string package = $"{PackageId}-{version}-{Channel}-full.nupkg";
                 if (asset.PackageId != PackageId || asset.Version.ToString() != version || asset.Type != VelopackAssetType.Full || asset.FileName != package || asset.Size != files[package].GetProperty("bytes").GetInt64() || !string.Equals(asset.SHA256, files[package].GetProperty("sha256").GetString(), StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Unexpected Windows update package.");
                 downloads.Add(asset, assets[package]);
+                offers.Add(asset, new(selected.Version, root.GetProperty("sourceCommit").GetString()!, asset.SHA256));
                 return feed;
             }
         }
@@ -150,11 +154,14 @@ public sealed class WindowsUpdateBackend : IWindowsUpdateBackend
     };
     private readonly Lazy<Velopack.Locators.IVelopackLocator> locator;
     private readonly Lazy<UpdateManager> manager;
+    private readonly WindowsGithubSource? publicationSource;
+    public WindowsUpdateOffer? Offer { get; private set; }
 
     public WindowsUpdateBackend() : this(new WindowsGithubSource(), null) { }
 
     internal WindowsUpdateBackend(IUpdateSource source, Velopack.Locators.IVelopackLocator? locator)
     {
+        publicationSource = source as WindowsGithubSource;
         this.locator = new(() => locator ?? Velopack.Locators.VelopackLocator.Current);
         manager = new(() => new UpdateManager(source, Options, this.locator.Value));
     }
@@ -165,6 +172,7 @@ public sealed class WindowsUpdateBackend : IWindowsUpdateBackend
 
     public async Task<Version?> CheckAsync()
     {
+        Offer = null;
         offered = null;
         downloaded = false;
         if (!IsInstalled) throw new InvalidOperationException("Install Storage to use in-app updates.");
@@ -174,6 +182,7 @@ public sealed class WindowsUpdateBackend : IWindowsUpdateBackend
         if (version <= CurrentVersion || update.IsDowngrade || update.TargetFullRelease.PackageId != WindowsGithubSource.PackageId)
             throw new InvalidDataException("Unsafe Windows update target.");
         offered = update;
+        Offer = publicationSource?.GetOffer(update.TargetFullRelease);
         return version;
     }
 
@@ -214,7 +223,8 @@ public sealed class WindowsUpdateBackend : IWindowsUpdateBackend
         var update = RequireOffer(version);
         await manager.Value.DownloadUpdatesAsync(update, progress, token);
         token.ThrowIfCancellationRequested();
-        VerifyCachedPackage(update.TargetFullRelease);
+        progress(100); // The SDK's cached-file fast path emits no download progress.
+        await Task.Run(() => VerifyCachedPackage(update.TargetFullRelease), token);
         token.ThrowIfCancellationRequested();
         downloaded = true;
     }

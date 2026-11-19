@@ -134,7 +134,7 @@ class MainActivity : ComponentActivity() {
   }
   LaunchedEffect(Unit) { work { api = withContext(Dispatchers.IO) { connection.connect().get(20, TimeUnit.SECONDS) }; refresh() } }
   Scaffold(
-   topBar = { TopAppBar(title = { Column { Text(selected?.optString("name") ?: collection?.optString("name") ?: "Storage", maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold); if (selected == null) Text("Your files. Your local store.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }, navigationIcon = { if (selected != null || collection != null) IconButton(onClick = { if (selected != null) { selected = null; versions = emptyList() } else { collection = null; work { refresh() } } }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } }, actions = { IconButton(enabled = !busy, onClick = { work { if (api == null) api = withContext(Dispatchers.IO) { connection.connect().get(20, TimeUnit.SECONDS) }; refresh() } }) { Icon(Icons.Outlined.Refresh, "Refresh") } }) },
+   topBar = { if (page != "Settings") TopAppBar(title = { Column { Text(selected?.optString("name") ?: collection?.optString("name") ?: "Storage", maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold); if (selected == null) Text("Your files. Your local store.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }, navigationIcon = { if (selected != null || collection != null) IconButton(onClick = { if (selected != null) { selected = null; versions = emptyList() } else { collection = null; work { refresh() } } }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } }, actions = { IconButton(enabled = !busy, onClick = { work { if (api == null) api = withContext(Dispatchers.IO) { connection.connect().get(20, TimeUnit.SECONDS) }; refresh() } }) { Icon(Icons.Outlined.Refresh, "Refresh") } }) },
    bottomBar = { NavigationBar { listOf("Items" to Icons.Outlined.Folder, "Collections" to Icons.Outlined.CollectionsBookmark, "Queries" to Icons.Outlined.Search, "Devices" to Icons.Outlined.Devices, "Settings" to Icons.Outlined.Settings).forEach { (label, icon) -> NavigationBarItem(selected = page == label, onClick = { page = label; selected = null; collection = null; if (label == "Items") work { refresh() } }, icon = { Icon(icon, label) }, label = { Text(label, maxLines = 1) }, alwaysShowLabel = true) } } },
    floatingActionButton = { if (page == "Items" && selected == null) ExtendedFloatingActionButton(onClick = { versionImport = false; importer.launch(arrayOf("*/*")) }, icon = { Icon(Icons.Outlined.Add, null) }, text = { Text("Import file") }) }
   ) { padding ->
@@ -188,9 +188,7 @@ class MainActivity : ComponentActivity() {
      }
      page == "Settings" -> LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
       item { Text("Settings", style = MaterialTheme.typography.headlineMedium) }
-      item { Section("About Storage") { Text("The browser has no repository access. All content operations are authenticated by Storage Service.") } }
-      item { Section("Updates") { com.everyonesoftware.storage.browser.updates.UpdateSettings() } }
-      item { Section("Appearance") { Text("Follows your device’s light or dark theme.") } }
+      item { com.everyonesoftware.storage.browser.updates.UpdateSettings() }
      }
     }
    }

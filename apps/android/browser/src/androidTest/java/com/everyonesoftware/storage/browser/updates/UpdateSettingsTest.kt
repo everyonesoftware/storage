@@ -20,7 +20,7 @@ class UpdateSettingsTest {
    val files = listOf("Service", "Browser").map { label ->
     val file = java.io.File(installer.directory, "Storage-$label-0.1.2.apk")
     instrumentation.context.assets.open("updates/$label.apk").use { input -> file.outputStream().use { input.copyTo(it) } }
-    org.json.JSONObject().put("name", file.name).put("bytes", file.length()).put("sha256", ReleaseClient.hex(java.security.MessageDigest.getInstance("SHA-256").digest(file.readBytes())))
+    org.json.JSONObject().put("name", file.name).put("bytes", file.length()).put("sha256", fixtureSha256(file))
    } + org.json.JSONObject().put("name", "Storage-android-SHA256SUMS").put("bytes", 1).put("sha256", "a".repeat(64))
    val raw = org.json.JSONObject().put("schemaVersion", 1).put("platform", "android").put("signing", "release-key").put("count", 2)
     .put("version", "0.1.2").put("tag", "v0.1.2").put("sourceCommit", "a".repeat(40)).put("files", org.json.JSONArray(files)).toString()
@@ -40,10 +40,14 @@ class UpdateSettingsTest {
  }
  @Test fun realSettingsShowsInstalledProductVersionsAndCheckAction() {
   compose.onNodeWithText("Settings").performClick()
-  compose.waitUntil(10000) { compose.onAllNodes(hasText("Browser 0.1.0 (1)", substring = true)).fetchSemanticsNodes().isNotEmpty() }
-  compose.onNodeWithText("Browser 0.1.0 (1)").assertIsDisplayed()
-  compose.onNodeWithText("Service 0.1.0 (1)").assertIsDisplayed()
-  compose.onNodeWithText("Check for updates").assertIsEnabled()
+  compose.waitUntil(10000) { compose.onAllNodesWithText("Current Version: 0.1.0").fetchSemanticsNodes().isNotEmpty() }
+  compose.onNodeWithText("Current Version: 0.1.0").assertIsDisplayed()
+  compose.onNodeWithText("Check now").assertIsEnabled()
+  for (removed in listOf("Updates", "About Storage", "Appearance", "Package versions", "Storage", "Your files. Your local store.")) compose.onNodeWithText(removed).assertDoesNotExist()
+  compose.onNodeWithContentDescription("Refresh").assertDoesNotExist()
+  for (tab in listOf("Items", "Collections", "Queries", "Devices")) compose.onNodeWithText(tab).assertIsDisplayed()
+  compose.onNodeWithText("Items").performClick()
+  compose.onNodeWithContentDescription("Refresh").assertExists()
  }
  @Test fun alreadyInstalledPublicationCannotStartDownloadOrEraseStaging() {
   val context = InstrumentationRegistry.getInstrumentation().targetContext

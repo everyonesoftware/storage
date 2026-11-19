@@ -1,5 +1,12 @@
 PASS user initiated check offers a newer Windows version
 PASS progress waits for explicit restart and staged update survives checking
+PASS exact source-range changelog, original subjects and platform filtering
+PASS paginated compare and commit files, shared fixes, strict identities, cancellation, incomplete/divergent/oversize/network failure
+PASS on-demand loading, replacement-offer stale results, failures/retry, missing installed source, collapse/reopen and close
+PASS selected refined section heading tokens from parsed runtime XAML
+PASS selected refined sidebar, main/title geometry, subtitle-free Settings and all three Windows sections
+PASS selected refined offered-version accent from parsed runtime XAML
+PASS actual runtime XAML parses; 64 unique control names and all MainWindow/update-panel typed lookups agree; disclosures collapsed
 PASS manifest-backed paginated Windows selection and original download
 PASS malformed manifests, duplicate inventories and integrity failures rejected
 PASS other-platform/no-update, paging cap, identity, malformed feed and original-origin binding
@@ -11,6 +18,7 @@ PASS re-tampered cached nupkg rejected before native apply/exit
 PASS restart integrity failure clears Ready without native apply/exit
 PASS no-update, downgrade, loose build, safe retry, preparation ordering, concurrent actions and close
 PASS updater transport has no credentials/cookies or URL rewriting fallback
+PASS changelog HTTP bounds before allocation and during streaming, rate-limit/redirect failures and isolated credentials
 PASS StartReportsReadiness
 PASS StartupFailureAllowsRetry
 PASS StopDrainsBeforeRestart

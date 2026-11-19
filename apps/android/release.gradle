@@ -15,7 +15,35 @@ def signingError = 'Android release signing requires all four STORAGE_KEYSTORE_P
 if (hasAnySigning && !hasCompleteSigning) throw new GradleException(signingError)
 def releaseKey = hasCompleteSigning ? file(signingValues[0]) : null
 if (releaseKey != null && !releaseKey.isFile()) throw new GradleException('Android release keystore file does not exist')
+// Embed a source identity only for clean, committed release inputs. Development/dirty
+// builds deliberately remain unknown; no version number is used as a Git revision.
+def gitText = { List<String> arguments ->
+    try {
+        def result = providers.exec {
+            workingDir rootProject.projectDir
+            commandLine(['git'] + arguments)
+            ignoreExitValue = true
+        }
+        result.result.get().exitValue == 0 ? result.standardOutput.asText.get().trim() : ''
+    } catch (Exception ignored) { '' }
+}
+def suppliedSource = providers.gradleProperty('storageSourceCommit').orNull
+if (suppliedSource != null && !(suppliedSource ==~ /[0-9a-f]{40}/)) {
+    throw new GradleException('storageSourceCommit must be a full lowercase 40-character source SHA')
+}
+def sourceCommit = 'unknown'
+if (releaseCount != null && suppliedSource != null && gitText(['status', '--porcelain']).isEmpty() &&
+        gitText(['rev-list', '--count', 'HEAD']) == releaseCount.toString() && gitText(['rev-parse', 'HEAD']) == suppliedSource) {
+    sourceCommit = suppliedSource
+}
 android {
+    buildFeatures { buildConfig = true }
+    defaultConfig {
+        buildConfigField 'String', 'BUILD_SOURCE_COMMIT', '""'
+    }
+    buildTypes.release {
+        buildConfigField 'String', 'BUILD_SOURCE_COMMIT', "\"${sourceCommit}\""
+    }
     defaultConfig {
         versionCode = releaseCount ?: 1
         versionName = "0.1.${releaseCount ?: 0}"

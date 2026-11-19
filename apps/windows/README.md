@@ -139,6 +139,16 @@ The lifecycle gate has bounded operations and runs beneath the workflow's **five
 
 ### In-app updates
 
+The native Settings view follows **Storage, refined**: compact update/version cards,
+bottom-anchored Settings navigation and no item inspector while Settings is active.
+Local service status/counts and collapsed technical/security details remain available.
+**What’s new** loads the exact installed assembly source → offered manifest source
+range on demand, not the release-description body or guessed version tags. Complete,
+bounded compare and per-commit file pagination preserves shared changes and original
+subjects/hashes. Missing source/history or notes failures expose retry without
+disabling a valid download. The short installed version stays readable; the full
+informational version is available in Technical details.
+
 Settings uses Velopack **1.2.161** and the existing `StorageWindows` / `win-x64` identity. Nothing checks, downloads or applies on startup. Choose **Check for updates**, then **Download update** (with progress), then **Restart and install**. Download alone never requests installation. Uninstalled development builds explain that an installed build is required, without contacting the release feed. Failures are retryable and never shown as “up to date.” The installed version comes from assembly informational metadata, including the release source identity.
 
 The public, cookie/credential-independent transport explicitly pages the GitHub release inventory (100 entries/page, ten-page hard cap); it does not assume GitHub Latest includes Windows. Stable Windows publications require `storage-windows-release.json`. Selection uses the highest numeric Windows version, binds all assets to that exact release, validates the complete platform inventory and feed hash, then validates the full-package size/SHA-256 against both manifest and feed before Velopack receives it. The backend independently reopens the final package in the same SDK locator's `PackagesDir` and checks the offered size/SHA-256 after `DownloadUpdatesAsync` (including its existing-file fast path) and immediately before `ApplyUpdatesAndRestart`. Changed or missing cached bytes cannot enable installation; restart integrity failures clear the Ready state. Malformed present metadata, unexpected origins, missing/duplicate payloads and inventory truncation fail rather than silently falling back. Downgrades and deltas are disabled. This verifies publication integrity, **not publisher signing**: Windows releases remain unsigned.

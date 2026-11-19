@@ -10,7 +10,6 @@ import org.junit.Assert.*
 import org.junit.After
 import org.junit.Test
 import java.io.File
-import java.security.MessageDigest
 
 /** Disposable debug APKs generated locally; not published releases or production Items. Never approves OS prompts. */
 class UpdateInstallerTest {
@@ -23,7 +22,7 @@ class UpdateInstallerTest {
   val files = listOf("Service", "Browser").map { name ->
    val file = File(installer.directory, "Storage-$name-0.1.2.apk")
    instrumentation.context.assets.open("updates/$name.apk").use { input -> file.outputStream().use { input.copyTo(it) } }
-   ReleaseFile(file.name, file.length(), ReleaseClient.hex(MessageDigest.getInstance("SHA-256").digest(file.readBytes())))
+   ReleaseFile(file.name, file.length(), fixtureSha256(file))
   } + ReleaseFile("Storage-android-SHA256SUMS", 1, "a".repeat(64))
   return AndroidRelease(2, files)
  }
@@ -36,8 +35,8 @@ class UpdateInstallerTest {
   val release = fixture()
   val first = File(installer.directory, release.apks[0].name)
   val second = File(installer.directory, release.apks[1].name)
-  first.writeBytes(second.readBytes())
-  val changed = release.copy(files = release.files.map { if (it.name == first.name) it.copy(bytes = first.length(), sha256 = ReleaseClient.hex(MessageDigest.getInstance("SHA-256").digest(first.readBytes()))) else it })
+  second.copyTo(first, overwrite = true)
+  val changed = release.copy(files = release.files.map { if (it.name == first.name) it.copy(bytes = first.length(), sha256 = fixtureSha256(first)) else it })
   assertThrows(Exception::class.java) { installer.verify(changed) }
  }
  @Test fun preparesRealServiceSessionThenCancelsWithoutInstalling() {

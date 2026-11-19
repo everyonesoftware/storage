@@ -11,6 +11,7 @@ static class ControllerTests
             await controller.DownloadAsync(); await controller.RestartAsync();
             await controller.CheckAsync(); await controller.DownloadAsync(); await controller.RestartAsync();
             Require(controller.Status.Phase == WindowsUpdatePhase.Current && backend.Downloads == 0 && backend.Applies == 0, "No update/equal/older cannot install");
+            Require(controller.Status.Message == "No newer Windows version is available.", "Approved current-state copy");
         }
         var loose = new ControlledBackend { Installed = false };
         using (var controller = new WindowsUpdateController(loose, () => Task.CompletedTask))

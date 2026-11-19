@@ -1,6 +1,7 @@
 package com.everyonesoftware.storage.browser.updates
 
 import android.content.Context
+import com.everyonesoftware.storage.browser.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -12,13 +13,25 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
+internal enum class UpdateCheckStatus { Unknown, Checking, Current, Failed }
+
 internal data class UpdateState(
  val release: AndroidRelease? = null, val busy: Boolean = false, val ready: Boolean = false,
- val received: Long = 0, val total: Long = 0, val message: String = "Check public Android releases from GitHub.",
+ val received: Long = 0, val total: Long = 0, val message: String = "Check now for a newer Android version.",
+ val checkStatus: UpdateCheckStatus = UpdateCheckStatus.Unknown,
+ val browserVersion: String = "unavailable",
  val browser: String = "Browser version unavailable", val service: String = "Service version unavailable",
  val nextPackage: String? = null, val session: Boolean = false, val confirmation: Boolean = false, val permission: Boolean = false,
- val cleanupPending: Boolean = false
-)
+ val cleanupPending: Boolean = false, val notes: ChangelogState = ChangelogState()
+) {
+ fun beginNotes(request: Long): UpdateState = copy(notes = ChangelogState(request = request, loading = true))
+ fun completeNotes(offer: AndroidRelease, request: Long, history: ChangeHistory?, unavailable: String?): UpdateState {
+  if (release != offer || notes.request != request) return this
+  return copy(notes = ChangelogState(request, history = history, unavailable = unavailable))
+ }
+ fun withOffer(offer: AndroidRelease?): UpdateState = copy(release = offer, notes = if (release == offer) notes else ChangelogState())
+}
+internal data class ChangelogState(val request: Long = 0, val loading: Boolean = false, val history: ChangeHistory? = null, val unavailable: String? = null)
 
 /** Finalization is separate so the real cancellation boundary can be exercised without Android. */
 internal fun finishUpdateOperation(gate: UpdateGate, state: MutableStateFlow<UpdateState>, cancel: () -> Unit) {
@@ -46,6 +59,29 @@ internal class UpdateController(context: Context, private val client: ReleaseCli
  private val gate = UpdateGate()
  private val mutable = MutableStateFlow(UpdateState())
  val state = mutable.asStateFlow()
+ private val notesClient = ReleaseClient()
+ private val notesSequence = java.util.concurrent.atomic.AtomicLong()
+ fun loadNotes() {
+  val snapshot = mutable.value
+  val offer = snapshot.release ?: return
+  if (snapshot.notes.loading) return
+  val request = notesSequence.incrementAndGet()
+  mutable.update { if (it.release == offer) it.beginNotes(request) else it }
+  scope.launch {
+   var sourceResolved = false
+   val cancelled = { mutable.value.release != offer || mutable.value.notes.request != request }
+   try {
+    val installed = installer.installed(BROWSER_PACKAGE)
+    val base = notesClient.installedSource(installed.code, installed.version, BuildConfig.BUILD_SOURCE_COMMIT, installed.debuggable, cancelled)
+    sourceResolved = true
+    val history = notesClient.changelog(base, offer.sourceCommit, cancelled)
+    mutable.update { it.completeNotes(offer, request, history, null) }
+   } catch (_: Exception) {
+    val reason = if (sourceResolved) "Couldn’t load what’s new." else "Installed source identity is unavailable."
+    mutable.update { it.completeNotes(offer, request, null, reason) }
+   }
+  }
+ }
  private fun operation(showBusy: Boolean = true, cleanupRetry: Boolean = false, action: () -> Unit) {
   if (!gate.enter()) return
   if (mutable.value.cleanupPending && !cleanupRetry) { gate.leave(); return }
@@ -54,7 +90,7 @@ internal class UpdateController(context: Context, private val client: ReleaseCli
    try { action() }
    catch (_: java.util.concurrent.CancellationException) { mutable.update { it.copy(message = "Update cancelled. You can retry.", ready = false) } }
    catch (e: SigningIdentityMismatch) { mutable.update { it.copy(message = e.message.orEmpty(), ready = false) } }
-   catch (_: Exception) { mutable.update { it.copy(message = if (gate.cancelled) "Update cancelled. You can retry." else "Update failed. Check your connection, available space and package signing identity, then retry. No repository data was changed.", ready = false) } }
+   catch (_: Exception) { mutable.update { it.copy(checkStatus = if (gate.cancelled) UpdateCheckStatus.Unknown else UpdateCheckStatus.Failed, message = if (gate.cancelled) "Update cancelled. You can retry." else "Update failed. Check your connection, available space and package signing identity, then retry. No repository data was changed.", ready = false) } }
    finally { finishUpdateOperation(gate, mutable, installer::cancel) }
   }
  }
@@ -65,20 +101,21 @@ internal class UpdateController(context: Context, private val client: ReleaseCli
   val release = raw?.let { ReleaseClient.parse(it) }
   val ready = installer.sessionId == -1 && release != null && runCatching { installer.verify(release) }.isSuccess &&
    (release.count > browser.code || release.count > service.code)
-  mutable.update { it.copy(release = release, ready = ready, browser = "Browser ${browser.version ?: "unknown"} (${browser.code})", service = "Service ${service.version ?: "unknown"} (${service.code})",
+  mutable.update { it.withOffer(release).copy(ready = ready, browserVersion = browser.version ?: "unavailable", browser = "Browser ${browser.version ?: "unknown"} (${browser.code})", service = "Service ${service.version ?: "unknown"} (${service.code})",
    nextPackage = release?.let { runCatching { UpdatePolicy.plan(android.os.Build.VERSION.SDK_INT, it.count, service, browser).firstOrNull() }.getOrNull() },
    permission = installer.canInstall(), session = installer.sessionId != -1, confirmation = installer.confirmationIntent() != null,
-   message = prefs.getString("result", null) ?: if (release != null && release.count.toLong() == browser.code && release.count.toLong() == service.code) "Both installed products match the selected release." else it.message) }
+   checkStatus = if (release != null && release.count.toLong() == browser.code && release.count.toLong() == service.code) UpdateCheckStatus.Current else it.checkStatus,
+   message = prefs.getString("result", null) ?: if (release != null && release.count.toLong() == browser.code && release.count.toLong() == service.code) "No newer Android version is available." else it.message) }
  }
  fun check() = operation {
   check(installer.sessionId == -1)
-  mutable.update { it.copy(message = "Checking public Android releases…", received = 0, total = 0) }
+  mutable.update { it.copy(checkStatus = UpdateCheckStatus.Checking, message = "Looking for a newer Android version.", received = 0, total = 0) }
   val release = client.latest(installer.installed(SERVICE_PACKAGE).code, installer.installed(BROWSER_PACKAGE).code) { gate.cancelled }
   gate.checkActive()
   if (release != null) check(prefs.edit().putString("release", encode(release)).remove("result").commit())
   else check(prefs.edit().remove("release").remove("result").commit())
   val next = release?.let { UpdatePolicy.plan(android.os.Build.VERSION.SDK_INT, it.count, installer.installed(SERVICE_PACKAGE), installer.installed(BROWSER_PACKAGE)).firstOrNull() }
-  mutable.update { it.copy(release = release, ready = false, nextPackage = next, message = if (release == null) "No newer compatible Android publication found." else "Android ${release.version} available: Service and Browser.") }
+  mutable.update { it.withOffer(release).copy(checkStatus = if (release == null) UpdateCheckStatus.Current else UpdateCheckStatus.Unknown, ready = false, nextPackage = next, message = if (release == null) "No newer Android version is available." else "") }
  }
  fun download() = operation {
   check(installer.sessionId == -1)
@@ -96,9 +133,10 @@ internal class UpdateController(context: Context, private val client: ReleaseCli
    completed += file.bytes
   }
   gate.checkActive()
+  mutable.update { it.copy(message = "Verifying both packages…", total = 0) }
   installer.verify(release)
   val next = UpdatePolicy.plan(android.os.Build.VERSION.SDK_INT, release.count, installer.installed(SERVICE_PACKAGE), installer.installed(BROWSER_PACKAGE)).firstOrNull()
-  mutable.update { it.copy(ready = next != null, nextPackage = next, message = "Both APKs verified. Install Service first, then return to install Browser. Each package needs Android confirmation.") }
+  mutable.update { it.copy(ready = next != null, nextPackage = next, message = "") }
  }
  fun install() = operation {
   check(installer.canInstall() && installer.sessionId == -1 && mutable.value.ready)

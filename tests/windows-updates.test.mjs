@@ -34,6 +34,32 @@ test('native harness includes cached-package integrity behaviors against the act
   for (const behaviorName of ['ValidPackage', 'RetamperedPackage', 'RetamperedController'])
     assert.match(behavior, new RegExp(`await ${behaviorName}\\(`));
 });
+test('Settings reclaims the inspector column, anchors icon navigation, and groups compact native content', () => {
+  const xaml = read('Shell.xaml'), main = read('MainWindow.cs');
+  assert.match(xaml, /x:Name="SettingsContent"[^>]*MaxWidth="720"/);
+  assert.match(xaml, /<Button[^>]*Grid.Row="2"[^>]*x:Name="SettingsNav"/);
+  for (const label of ['All items', 'Collections', 'Settings']) assert.match(xaml, new RegExp(`AutomationProperties.Name="${label}"`));
+  for (const name of ['InspectorHost', 'WorkspaceContent', 'WorkspaceColumns', 'ServiceRepository', 'ServiceDetails', 'TechnicalDetails', 'SecurityDetails']) assert.match(xaml, new RegExp(`x:Name="${name}"`));
+  assert.match(main, /C<Grid>\("WorkspaceContent"\).RowSpacing = target == "settings" \? 0 : 18/);
+  assert.match(main, /ColumnSpan\(C<Grid>\("WorkspaceContent"\), target == "settings" \? 2 : 1\)/);
+  assert.match(main, /C<Border>\("InspectorHost"\).Visibility = target == "settings" \? Visibility.Collapsed : Visibility.Visible/);
+  assert.match(main, /C<TextBlock>\("Status"\).Visibility = target == "settings" \? Visibility.Collapsed : Visibility.Visible/);
+  assert.doesNotMatch(main, /\(string\).*\.Content/);
+  for (const text of ['Updates', 'Local service', 'About Storage', 'Security and build information', 'Windows releases are unsigned', 'Device pairing, replication']) assert.ok(xaml.includes(text), text);
+  assert.doesNotMatch(xaml, /WebView/);
+});
+test('available notes use real on-demand disclosure and a separate retry without gating download', () => {
+  const xaml = read('Shell.xaml'), panel = read('WindowsUpdatesPanel.cs');
+  for (const [tag, name] of [['TextBlock', 'UpdateTitle'], ['TextBlock', 'OfferedVersion'], ['Expander', 'WhatsNew'], ['Button', 'RetryChangelog'], ['StackPanel', 'NotesGroups'], ['Expander', 'CommitDetails']]) assert.match(xaml, new RegExp(`<${tag}[^>]*x:Name="${name}"`));
+  assert.match(xaml, /x:Name="WhatsNew"[^>]*IsExpanded="False"/);
+  assert.match(panel, /Expanding \+= NotesExpanded/);
+  assert.match(panel, /await notes.LoadAsync\(\)/);
+  assert.match(panel, /notes.Select\(/);
+  assert.match(panel, /notes.Dispose\(\)/);
+  assert.match(panel, /Current Version: /);
+  assert.match(panel, /ApplicationBuild/);
+  assert.doesNotMatch(panel, /ReleaseNotes|ReleaseBody|Version .*→/);
+});
 test('startup autoapply stays disabled and exact bundled-service hooks survive', () => {
   const program = read('Program.cs');
   assert.match(program, /SetAutoApplyOnStartup\(false\)/);

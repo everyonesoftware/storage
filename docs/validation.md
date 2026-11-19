@@ -1,5 +1,68 @@
 # Integrated local-slice validation
 
+## Compact native Settings redesign — November 19, 2026
+
+The approved Windows **Storage, refined** and simplified Android Settings designs
+are implemented in native WinUI/Compose, with on-demand, exact-source changelogs.
+The Android app omits the retired header/refresh action and Updates, package
+versions, About and Appearance sections. Both platforms retain real updater
+verification and explicit installation actions; mockup controls/data are not shipped.
+
+Final parent-run gates after the reviewed fixes:
+
+- Windows portable/native-core integration: **97 assertions**, no failures/skips;
+  Service and real-reference WinUI Linux cross-builds: **0 warnings/errors**.
+- Android final native-containing products/test APKs, unit tasks and both lints:
+  passed. Parsed final JVM reports: **46 Browser + 5 Service tests**, no
+  failures/errors/skips. The APK pair verifies with the same existing debug signer;
+  Service alone contains the actual core and descriptor shim for both ABIs.
+- Task-owned API-29 `storage-settings-native29`, `emulator-5590`, 412×915 at density
+  160: the complete final `validate-device.sh` passed **39 tests in 13 groups**.
+  This includes eight native update-panel cases, real Settings navigation/removals,
+  permission refusal, Service-first real OS session/consent, cleanup, denied callers,
+  Binder content integrity and cold persistence. No completed package upgrade is
+  claimed in this task. Fixture-state card screenshots are explicitly test evidence.
+- Full Node suite including actual Gradle release-configuration refusal checks:
+  **97 passed, no skips**. Rust workspace **19 tests**, formatting,
+  warnings-denied Clippy, and **5 C ABI checks** passed.
+
+Independent review found an Android subject-only filtering defect. The correction
+uses complete, bounded per-commit changed-file metadata (including rename sources),
+retains shared changes regardless of subject scope, and rejects incomplete history.
+The final 301-commit test exercises all 305 credential-free compare/file requests.
+The final independent read-only re-review passed with no remaining reported security
+or logic concerns in the corrected changelog backends.
+
+Pre-push inspection also found the preceding hosted Android run had exhausted its
+16 MiB heap while hashing an entire APK fixture. Instrumentation fixtures now stream
+hashes and swapped-package copies without changing updater verification assertions.
+The actual compiled Kotlin helper verified an 18,506,540-byte APK under `-Xmx16m`;
+the whole-file control failed with `OutOfMemoryError`. The complete 39-test native
+suite and 97-test Node suite passed again after this test-only correction. Logs:
+`/opt/data/cache/scratch/storage-settings-{heap-red,prepush-device,prepush-node}.log`.
+
+An initial API-35 run passed the earlier panel/settings/installer groups but was
+interrupted when revoking an install-source app-op killed the instrumented UID.
+Grant/restoration now runs outside that instrumentation, with tested failure cleanup.
+The unaccelerated API-35 image subsequently showed a System UI ANR under host
+pressure; it was stopped without touching another task's emulator. Final complete
+runtime evidence above is API 29 and light theme only, not final API-35/dark acceptance.
+
+Development APKs, exact hashes and a machine-readable evidence summary are under
+`artifacts/settings-redesign/android/`. They remain **0.1.0 / code 1**, development
+debug-signed, and are not an in-place update for production-signed installations.
+Do not uninstall or clear an existing Service to bypass a signature mismatch.
+
+Windows installer packaging and native rendering/upgrade acceptance remain blocked
+by the lack of an accessible Windows build host. No native Windows installer,
+physical-phone success, production-signer upgrade, commit, push or publication is
+claimed. Root download tables and published assets were not changed.
+
+Parent logs are `/opt/data/cache/scratch/storage-settings-{device-final,windows-final,
+node-complete,final-android}.log`; final per-group device logs are under
+`apps/android/build/device-validation/`. Historical repeat logs in that directory
+are not included in the final 13-group count.
+
 ## In-app updater integration — November 18, 2026
 
 The working tree implements user-initiated Windows and Android Settings updates;

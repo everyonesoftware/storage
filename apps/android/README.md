@@ -71,7 +71,7 @@ environment:
 # Only Android engines, no LLVM-MinGW dependency; honors the pinned Rust toolchain.
 bash scripts/build-android-native.sh
 bash apps/android/gradlew -p apps/android :service:assembleRelease :browser:assembleRelease \
-  -PstorageCommitCount="$COMMIT_COUNT" --no-daemon --console=plain --max-workers=2
+  -PstorageCommitCount="$COMMIT_COUNT" -PstorageSourceCommit="$SOURCE_COMMIT" --no-daemon --console=plain --max-workers=2
 node scripts/package-android.mjs --version "$RELEASE_VERSION" --directory dist/android
 node scripts/release.mjs manifest --platform android --directory dist/android
 ```
@@ -129,8 +129,22 @@ Saved Queries, pairing and replication are visibly not implemented. Settings che
 
 ## Application updates
 
-Settings shows PackageManager's actual installed Browser and Service version names/codes.
-User flow: **Check for updates → Download update** (combined byte progress) → allow
+Settings shows the real installed Browser version in the compact **Current Version**
+heading. PackageManager's Browser and Service identities are independently checked
+for update eligibility; the retired Package versions section is not displayed.
+The Settings-only application header/refresh action, Updates heading, About Storage
+and Appearance sections are omitted; the five-tab navigation is retained.
+
+**What’s new** loads the complete installed-to-offered source range on demand,
+grouped into Improvements and Fixes with original subjects/hashes in Commit details.
+Complete per-commit file metadata determines platform relevance; mixed/shared changes
+are retained. Missing source identity, truncated history and network errors remain
+unavailable/retry states without blocking a valid download. `storageSourceCommit`
+embeds source identity only for matching clean committed release inputs; debug builds
+deliberately retain unknown source identity. CI supplies the same SHA as the release
+manifest. This is not a release-description or version-tag-based changelog.
+
+User flow: **Check now → Download update** (combined byte progress) → allow
 installs from Storage in Android Settings if necessary → **Install Service update**
 → **Continue installation…** → Android's Service confirmation → return to Settings
 → **Install Browser update** → **Continue installation…** → Android's Browser confirmation. No permission or install

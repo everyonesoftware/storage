@@ -4,12 +4,13 @@ public interface IWindowsUpdateBackend
 {
     bool IsInstalled { get; }
     Version CurrentVersion { get; }
+    WindowsUpdateOffer? Offer => null;
     Task<Version?> CheckAsync();
     Task DownloadAsync(Version version, Action<int> progress, CancellationToken token);
     void ApplyAndRestart(Version version);
 }
 
-public enum WindowsUpdatePhase { Idle, Checking, Current, Available, Downloading, Ready, Restarting, Error, NotInstalled }
+public enum WindowsUpdatePhase { Idle, Checking, Current, Available, Downloading, Verifying, Ready, Restarting, Error, NotInstalled }
 public sealed record WindowsUpdateStatus(WindowsUpdatePhase Phase, string Message, Version? Version = null, int Progress = 0);
 
 /// <summary>Only explicit user actions check, download or apply. No app credentials or repository access.</summary>
@@ -43,8 +44,8 @@ public sealed class WindowsUpdateController(IWindowsUpdateBackend backend, Func<
             Set(new(WindowsUpdatePhase.Checking, "Checking Windows releases…"));
             var version = await backend.CheckAsync();
             Set(version is not null && version > backend.CurrentVersion
-                ? new(WindowsUpdatePhase.Available, $"Windows {version} is available. Download it to continue.", version)
-                : new(WindowsUpdatePhase.Current, "No newer Windows release is available."));
+                ? new(WindowsUpdatePhase.Available, "", version)
+                : new(WindowsUpdatePhase.Current, "No newer Windows version is available."));
         }
         catch { Set(new(WindowsUpdatePhase.Error, "Could not check for updates. Check your connection or try again later; GitHub may be unavailable or rate-limiting requests.")); }
         finally { Interlocked.Exchange(ref busy, 0); }
@@ -56,13 +57,14 @@ public sealed class WindowsUpdateController(IWindowsUpdateBackend backend, Func<
         try
         {
             if (Status.Phase != WindowsUpdatePhase.Available || Status.Version is not { } version) return;
-            Set(new(WindowsUpdatePhase.Downloading, $"Downloading Windows {version}…", version));
+            Set(new(WindowsUpdatePhase.Downloading, "Downloading…", version));
             await backend.DownloadAsync(version, value =>
             {
-                if (Status.Phase == WindowsUpdatePhase.Downloading)
-                    Set(new(WindowsUpdatePhase.Downloading, $"Downloading Windows {version}…", version, Math.Clamp(value, 0, 100)));
+                if (Status.Phase is WindowsUpdatePhase.Downloading or WindowsUpdatePhase.Verifying)
+                    Set(value >= 100 ? new(WindowsUpdatePhase.Verifying, "Verifying download…", version, 100)
+                        : new(WindowsUpdatePhase.Downloading, "Downloading…", version, Math.Clamp(value, 0, 100)));
             }, lifetime.Token);
-            Set(new(WindowsUpdatePhase.Ready, $"Windows {version} is downloaded. Restart and install when you are ready.", version, 100));
+            Set(new(WindowsUpdatePhase.Ready, "", version, 100));
         }
         catch { Set(new(WindowsUpdatePhase.Error, "Download failed or was cancelled. Nothing was installed. Check for updates to try again.")); }
         finally { Interlocked.Exchange(ref busy, 0); }

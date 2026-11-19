@@ -61,9 +61,14 @@ static class CachedPackageTests
     private static async Task ValidPackage(bool cached)
     {
         using var fixture = new Fixture();
+        var phases = new List<WindowsUpdatePhase>();
+        fixture.Controller.Changed += status => phases.Add(status.Phase);
         if (cached) File.WriteAllBytes(fixture.PackagePath, FixtureDownloader.Package);
         await fixture.Controller.CheckAsync();
+        FeedTests.Require(fixture.Backend.Offer?.SourceCommit == new string('a', 40) && fixture.Backend.Offer.Version == fixture.Controller.Status.Version,
+            "Actual SDK selection preserves manifest source identity for the displayed offer");
         await fixture.Controller.DownloadAsync();
+        FeedTests.Require(phases.Contains(WindowsUpdatePhase.Verifying), "Both cached and fresh packages visibly enter final verification before Ready");
         FeedTests.Require(fixture.Controller.Status.Phase == WindowsUpdatePhase.Ready && fixture.Locator.Starts == 0,
             "Verified package reaches Ready without autoapply");
         FeedTests.Require(fixture.Downloader.Requests.Any(u => u.EndsWith(".nupkg")) != cached,

@@ -9,6 +9,12 @@ import org.junit.Test
 import java.util.concurrent.TimeoutException
 
 class UpdateFinalizationTest {
+ @Test fun initialStateDoesNotClaimACheckOrAnAvailableVersion() {
+  val state = UpdateState()
+  assertNull(state.release)
+  assertEquals(UpdateCheckStatus.Unknown, state.checkStatus)
+  assertEquals("Check now for a newer Android version.", state.message)
+ }
  @Test fun failedCancellationRetainsOwnershipAndAllowsExplicitCleanupRetry() {
   for (failure in listOf(IllegalStateException("journal commit failed"), TimeoutException("sessions not released"))) {
    for (sessionVisible in listOf(true, false)) {

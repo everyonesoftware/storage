@@ -5,7 +5,19 @@ if (args.Contains("--live", StringComparer.Ordinal))
 {
     var source = new WindowsGithubSource();
     var feed = await source.GetReleaseFeed(Velopack.Logging.NullVelopackLogger.Instance, WindowsGithubSource.PackageId, WindowsGithubSource.Channel);
-    foreach (var asset in feed.Assets) Console.WriteLine($"LIVE READ-ONLY {asset.PackageId} {asset.Version} {asset.FileName} {asset.Size} bytes");
+    foreach (var asset in feed.Assets)
+    {
+        Console.WriteLine($"LIVE READ-ONLY {asset.PackageId} {asset.Version} {asset.FileName} {asset.Size} bytes");
+        int installedIndex = Array.IndexOf(args, "--installed-build");
+        if (installedIndex >= 0)
+        {
+            string installed = WindowsChangelogSource.InstalledSource(args[installedIndex + 1]) ?? throw new InvalidDataException("Installed build must contain its exact source SHA.");
+            var offer = source.GetOffer(asset) ?? throw new InvalidDataException("Missing manifest source identity.");
+            var notes = await new WindowsChangelogSource().LoadAsync(installed, offer.SourceCommit, CancellationToken.None);
+            Console.WriteLine($"LIVE READ-ONLY CHANGELOG {notes.InstalledSource}..{notes.OfferedSource}: {notes.Commits.Count} commits; {notes.Improvements.Count} improvements; {notes.Fixes.Count} fixes");
+            foreach (var commit in notes.Commits) Console.WriteLine($"SOURCE {commit.Hash} {commit.Subject}");
+        }
+    }
 }
 
 namespace Storage.Update.Tests
@@ -29,12 +41,15 @@ namespace Storage.Update.Tests
             Equal(1, backend.Downloads);
             Equal(0, backend.Applies);
             Equal(true, statuses.Any(s => s.Progress == 51 && s.Phase == WindowsUpdatePhase.Downloading));
+            Equal(true, statuses.Any(s => s.Phase == WindowsUpdatePhase.Verifying));
             await controller.CheckAsync();
             Equal(1, backend.Checks);
             await controller.RestartAsync();
             Equal(1, backend.Applies);
             Console.WriteLine("PASS progress waits for explicit restart and staged update survives checking");
 
+            await ChangelogTests.Run();
+            SettingsSourceTests.Run();
             await FeedTests.Run();
             await FeedBoundaryTests.Run();
             await BackendTests.Run();
@@ -58,6 +73,6 @@ sealed class Backend : IWindowsUpdateBackend
     public Version CurrentVersion => new(0, 1, 10);
     public int Checks, Downloads, Applies;
     public Task<Version?> CheckAsync() { Checks++; return Task.FromResult<Version?>(new(0, 1, 20)); }
-    public Task DownloadAsync(Version version, Action<int> progress, CancellationToken token) { Downloads++; progress(51); return Task.CompletedTask; }
+    public Task DownloadAsync(Version version, Action<int> progress, CancellationToken token) { Downloads++; progress(51); progress(100); return Task.CompletedTask; }
     public void ApplyAndRestart(Version version) { Applies++; }
 }

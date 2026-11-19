@@ -24,7 +24,18 @@ JS
 }
 run_test updates-installer com.everyonesoftware.storage.browser com.everyonesoftware.storage.browser.updates.UpdateInstallerTest 4
 run_test updates-settings com.everyonesoftware.storage.browser com.everyonesoftware.storage.browser.updates.UpdateSettingsTest 4
-run_test updates-restart com.everyonesoftware.storage.browser com.everyonesoftware.storage.browser.updates.UpdateRestartTest 5
+run_test updates-panel com.everyonesoftware.storage.browser com.everyonesoftware.storage.browser.updates.UpdatePanelTest 8
+# API 35 can kill the UID when REQUEST_INSTALL_PACKAGES is revoked. Keep that
+# transition outside instrumentation, including failure cleanup. Never approve installs.
+run_restart_tests() (
+ local package=com.everyonesoftware.storage.browser before mode
+ before=$(adb -s "$serial" shell appops get "$package" REQUEST_INSTALL_PACKAGES)
+ mode=$(printf '%s\n' "$before" | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>console.log(s.match(/REQUEST_INSTALL_PACKAGES: ([a-z]+)/)?.[1] ?? "default"))')
+ trap 'adb -s "$serial" shell appops set "$package" REQUEST_INSTALL_PACKAGES "$mode"' EXIT
+ adb -s "$serial" shell appops set "$package" REQUEST_INSTALL_PACKAGES allow
+ run_test updates-restart "$package" com.everyonesoftware.storage.browser.updates.UpdateRestartTest 5
+)
+run_restart_tests
 run_test service-binder com.everyonesoftware.storage.service com.everyonesoftware.storage.service.StorageBinderTest 8
 run_test denied-caller com.everyonesoftware.storage.denied com.everyonesoftware.storage.denied.DeniedCallerTest 1
 adb -s "$serial" shell am force-stop com.everyonesoftware.storage.browser

@@ -87,6 +87,15 @@ test('Android updater fixtures are built before instrumentation with the code-1 
  assert.match(android, /:service:assembleRelease :browser:assembleRelease "-PstorageCommitCount=\$COMMIT_COUNT"/);
 });
 
+test('Android release embeds its exact platform source for installed-to-offered changelogs', () => {
+ const android = job(workflow(), 'android');
+ const release = android.split('name: Build signed Android release installers')[1]?.split('name: Retain Android test and GUI diagnostics')[0] ?? '';
+ assert.ok(release.includes('SOURCE_COMMIT: ${{ steps.version.outputs.sha }}'), 'Use the same verified source as the platform manifest');
+ assert.match(release, /:service:assembleRelease :browser:assembleRelease .*"-PstorageSourceCommit=\$SOURCE_COMMIT"/);
+ const debug = android.split('\n').find(line => line.includes(':browser:testDebugUnitTest'));
+ assert.doesNotMatch(debug, /storageSourceCommit/, 'Disposable debug builds must not impersonate a published source');
+});
+
 test('updater integration guards run in shared validation and Windows packaging', () => {
  const text = workflow();
  for (const platform of ['android', 'windows']) assert.match(job(text, 'validate'), new RegExp(`tests/${platform}-updates\\.test\\.mjs`));

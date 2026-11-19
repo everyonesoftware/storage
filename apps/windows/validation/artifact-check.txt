@@ -1,5 +1,5 @@
-ASSERTIONS=89; no skips or failures
+ASSERTIONS=97; no skips or failures
 NATIVE_SHA256=0ebf8e7ae8bc5cef8d5d04abbfab2554785f5d2c9cd7cd2fecc54ce839227255
 VERIFIED_X64_PE Storage.Service/bin/Debug/net10.0/win-x64/Storage.Service.exe (167424 bytes)
-VERIFIED_X64_PE Storage.Browser/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Storage.Browser.dll (134144 bytes)
+VERIFIED_X64_PE Storage.Browser/bin/Debug/net10.0-windows10.0.19041.0/win-x64/Storage.Browser.dll (173568 bytes)
 PE/resource presence checks only; no native Windows launch or resource resolution claimed.

@@ -13,7 +13,10 @@ test('Controller finalizes through the tested boundary and permits only cleanup 
 
 test('Cleanup retry stays visible even when no primary session ID reached UI state', () => {
  const source = read('UpdateSettings');
- assert.match(source, /if \(state\.busy \|\| state\.session \|\| state\.cleanupPending\) TextButton\(onClick = controller::cancel\)/);
+ assert.match(source, /onCancel = controller::cancel/);
+ assert.match(source, /if \(state\.busy \|\| state\.session \|\| state\.cleanupPending\) TextButton\(onClick = onCancel\)/);
  assert.match(source, /!state\.busy && !state\.session && !state\.cleanupPending/);
- assert.match(source, /if \(state\.release != null && state\.nextPackage != null && !state\.session && !state\.cleanupPending\)/);
+ assert.match(source, /val offered = state\.release != null && state\.nextPackage != null/);
+ assert.match(source, /if \(offered && !state\.ready && !state\.session && !state\.cleanupPending\)/);
+ assert.match(source, /if \(state\.ready && state\.nextPackage != null && !state\.session && !state\.cleanupPending\)/);
 });
