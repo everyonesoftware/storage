@@ -7,8 +7,8 @@ Choose your platform. Each platform keeps its newest verified manifest-backed pu
 
 | Platform | Version | Download | Status |
 | --- | --- | --- | --- |
-| Windows x64 | 0.1.16 | [Installer (.exe)](https://github.com/everyonesoftware/storage/releases/download/v0.1.16/StorageWindows-0.1.16-win-x64-Setup.exe) · [SHA-256](https://github.com/everyonesoftware/storage/releases/download/v0.1.16/StorageWindows-0.1.16-win-x64-Setup.exe.sha256) | Unsigned; Windows may show an unknown-publisher/SmartScreen warning. |
-| Android | 0.1.14 | [Service APK](https://github.com/everyonesoftware/storage/releases/download/v0.1.14/Storage-Service-0.1.14.apk) · [Browser APK](https://github.com/everyonesoftware/storage/releases/download/v0.1.14/Storage-Browser-0.1.14.apk) · [SHA-256](https://github.com/everyonesoftware/storage/releases/download/v0.1.14/Storage-android-SHA256SUMS) | Install Service first, then Browser. Signed with the Storage release key. |
+| Windows x64 | 0.1.18 | [Installer (.exe)](https://github.com/everyonesoftware/storage/releases/download/v0.1.18/StorageWindows-0.1.18-win-x64-Setup.exe) · [SHA-256](https://github.com/everyonesoftware/storage/releases/download/v0.1.18/StorageWindows-0.1.18-win-x64-Setup.exe.sha256) | Unsigned; Windows may show an unknown-publisher/SmartScreen warning. |
+| Android | 0.1.18 | [Service APK](https://github.com/everyonesoftware/storage/releases/download/v0.1.18/Storage-Service-0.1.18.apk) · [Browser APK](https://github.com/everyonesoftware/storage/releases/download/v0.1.18/Storage-Browser-0.1.18.apk) · [SHA-256](https://github.com/everyonesoftware/storage/releases/download/v0.1.18/Storage-android-SHA256SUMS) | Install Service first, then Browser. Signed with the Storage release key. |
 
 Verify SHA-256 checksums before installation. Unchanged platforms retain their original release, version and source identity. These downloads are not an in-app update feed.
 <!-- current-downloads:end -->
