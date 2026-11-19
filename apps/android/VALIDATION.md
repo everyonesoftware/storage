@@ -1,5 +1,50 @@
 # Android validation evidence
 
+## Folder + engine product icons — November 19, 2026
+
+- Strict test-first source/resource gates: the Service canonical geometry test
+  initially failed because it still contained the Browser folder paths; it passed
+  after the exact approved engine paths were installed. Next, adaptive/round/themed
+  tests failed on both manifests' old `@drawable/ic_storage` references, then passed
+  with the new adaptive resources. Finally, the in-app branding guard failed on
+  the absent `Image`/canonical folder rendering, then passed with the root header
+  and empty-state change. Browser's canonical full vector is unchanged.
+- After sourcing `/opt/data/tools/storage-env.sh`, ran:
+
+  ```sh
+  STORAGE_ANDROID_GRADLE_TESTS=1 node --test tests/android-release.test.mjs \
+    tests/android-updates.test.mjs tests/android-update-finalization.test.mjs
+  bash apps/android/gradlew -p apps/android \
+    :service:testDebugUnitTest :service:lintDebug :service:assembleDebug :service:assembleDebugAndroidTest \
+    :browser:testDebugUnitTest :browser:lintDebug :browser:assembleDebug :browser:assembleDebugAndroidTest \
+    :denied:assembleDebug :denied:assembleDebugAndroidTest --console=plain --max-workers=2
+  ```
+
+- Node: **25 passed, zero failures/skips**, including all **5** icon guards imported
+  by the ordinary CI Android-release test entrypoint and real Gradle fail-closed
+  release configuration checks. Build: **BUILD SUCCESSFUL in 56s**, **276 actionable
+  tasks**, 58 executed/218 up-to-date. Parsed JUnit XML: Service **5**, Browser **46**,
+  no failures/errors/skips. No missing-native bypass or native rebuild was used.
+- Lint: no errors; Browser **23 warnings**, Service **7 warnings**. Warnings include
+  existing dependency/KTX/backup guidance, redundant API-26 resource qualifiers,
+  lint's base-adaptive missing-monochrome warning despite the explicit API-33
+  resource, and Service's intentionally external-consumed canonical vector being
+  locally unused. The SDK also emitted its XML-version compatibility warning.
+- SDK-36 `apksigner verify --verbose` accepted both real debug APKs (v2 signatures).
+  `apkanalyzer manifest application-id`, `manifest print` and `resources xml`
+  verified unchanged package IDs, code 1 / `0.1.0`, normal and round application
+  references, API-33 compiled monochrome wiring, Browser's existing launcher, and
+  Service's absence of an Activity. ZIP inspection verified both engine/descriptor
+  ABIs in Service and neither service-private library in Browser, plus all full,
+  foreground, monochrome and adaptive icon resources in both APKs.
+- Inventory is recorded in `README.md`: neither product posts notifications or
+  owns a notification small icon; Service has no branding Activity. No permission,
+  identity, Binder/security, updater, service lifecycle or CI/release behavior was
+  changed. No commit/push, install, emulator/device interaction or native runtime
+  acceptance was performed. Launcher/themed masks and Compose visuals remain
+  unverified on-device; compilation/source guards are not runtime visual evidence.
+
+
 ## User-initiated updater — November 18, 2026
 
 ### Final sequential installed-upgrade gate — passed on API 29

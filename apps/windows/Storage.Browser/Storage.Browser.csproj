@@ -27,6 +27,9 @@
     <Content Remove="Assets/Storage.ico" />
     <None Remove="Assets/Storage.ico" />
     <Content Include="Assets/Storage.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Remove="Assets/Storage.png" />
+    <None Remove="Assets/Storage.png" />
+    <Content Include="Assets/Storage.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="PublishMergedWinUIResources" AfterTargets="Publish" Condition="'$(OS)' == 'Windows_NT'">
     <Error Condition="!Exists('$(ProjectPriFullPath)')" Text="Windows publish requires the native merged WinUI resource index." />

@@ -1,4 +1,4 @@
-// Render Storage's existing Android artwork into Windows ICO sizes, without image dependencies.
+// Render the approved Android folder/engine artwork into Windows assets, without image dependencies.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,20 +6,42 @@ import { deflateSync } from 'node:zlib';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const args = process.argv.slice(2);
-if (args.length && (args.length !== 2 || args[0] !== '--output-directory' || !args[1])) throw Error('Usage: generate-windows-icons.mjs [--output-directory PATH]');
-const output = args.length ? resolve(args[1]) : resolve(root, 'apps/windows/Storage.Browser/Assets');
-const vector = readFileSync(resolve(root, 'apps/android/browser/src/main/res/drawable/ic_storage.xml'), 'utf8');
+const options = new Map();
+for (let i = 0; i < args.length; i += 2) {
+    if (!['--application', '--output-directory'].includes(args[i]) || !args[i + 1] || args[i + 1].startsWith('--') || options.has(args[i])) throw Error('Usage: generate-windows-icons.mjs [--application browser|service] [--output-directory PATH]');
+    options.set(args[i], args[i + 1]);
+}
+const application = options.get('--application') ?? 'browser';
+if (!['browser', 'service'].includes(application)) throw Error('Application must be browser or service.');
+const output = resolve(options.get('--output-directory') ?? resolve(root, `apps/windows/Storage.${application === 'browser' ? 'Browser' : 'Service'}/Assets`));
+const vector = readFileSync(resolve(root, `apps/android/${application}/src/main/res/drawable/ic_storage.xml`), 'utf8');
 if (!/android:viewportWidth="48"/.test(vector) || !/android:viewportHeight="48"/.test(vector)) throw Error('Unsupported Storage icon viewport.');
+// This is a narrow renderer, not an XML/VectorDrawable engine. Reject any
+// semantics (groups, alpha, strokes, etc.) that inkAt cannot reproduce.
+const structure = vector.replace(/<!--[^]*?-->/g, '').replace(/<path\s+([^>]+)\/>/g, (_, attributes) => {
+    const rest = attributes.replace(/android:(?:pathData|fillColor)="[^"]*"/g, '').trim();
+    if (rest) throw Error('Unsupported Storage icon path attributes.');
+    return '';
+}).replace(/<vector\s+([^>]+)>/, (_, attributes) => {
+    const rest = attributes.replace(/(?:xmlns:android|android:(?:width|height|viewportWidth|viewportHeight))="[^"]*"/g, '').trim();
+    if (rest) throw Error('Unsupported Storage icon vector attributes.');
+    return '';
+}).replace('</vector>', '').trim();
+if (structure) throw Error('Unsupported Storage icon structure.');
 const paths = [...vector.matchAll(/<path\s+([^>]+)\/>/g)].map(([, attributes]) => ({
     data: attributes.match(/android:pathData="([^"]+)"/)?.[1],
     color: attributes.match(/android:fillColor="(#[a-fA-F0-9]{6})"/)?.[1],
 }));
-// This deliberately supports only the current rounded tile, folder and two bars.
+// Deliberately support only the approved rounded tile and role-specific glyphs.
 // Refuse a redesign rather than quietly emitting stale or approximated artwork.
-const expected = [
+const expected = application === 'browser' ? [
     'M8,4h32a4,4 0,0 1,4 4v32a4,4 0,0 1,-4 4H8a4,4 0,0 1,-4 -4V8a4,4 0,0 1,4 -4',
     'M12,14h10l4,4h10v17H12z',
     'M17,24h14v3H17zM17,29h9v2H17z',
+] : [
+    'M8,4h32a4,4 0,0 1,4 4v32a4,4 0,0 1,-4 4H8a4,4 0,0 1,-4 -4V8a4,4 0,0 1,4 -4',
+    'M14,13h20a2,2 0,0 1,2 2v6a2,2 0,0 1,-2 2H14a2,2 0,0 1,-2 -2v-6a2,2 0,0 1,2 -2M14,26h20a2,2 0,0 1,2 2v6a2,2 0,0 1,-2 2H14a2,2 0,0 1,-2 -2v-6a2,2 0,0 1,2 -2',
+    'M16,17h8v2h-8zM16,30h8v2h-8zM32.5,18a1.5,1.5 0,1 0,-3 0a1.5,1.5 0,1 0,3 0M32.5,31a1.5,1.5 0,1 0,-3 0a1.5,1.5 0,1 0,3 0',
 ];
 if (paths.length !== expected.length || paths.some((p, i) => p.data !== expected[i] || !p.color)) throw Error('Unsupported Storage icon geometry/colors; update the renderer for the new artwork.');
 const colors = paths.map(p => [1, 3, 5].map(offset => parseInt(p.color.slice(offset, offset + 2), 16)));
@@ -27,6 +49,17 @@ function inkAt(x, y) {
     if (x < 4 || x >= 44 || y < 4 || y >= 44) return null;
     const dx = Math.max(8 - x, 0, x - 40), dy = Math.max(8 - y, 0, y - 40);
     if (dx * dx + dy * dy > 16) return null;
+    if (application === 'service') {
+        for (const top of [13, 26]) {
+            if (x < 12 || x >= 36 || y < top || y >= top + 10) continue;
+            const cornerX = Math.max(14 - x, 0, x - 34), cornerY = Math.max(top + 2 - y, 0, y - top - 8);
+            if (cornerX * cornerX + cornerY * cornerY > 4) continue;
+            const centerY = top + 5;
+            if ((x >= 16 && x < 24 && y >= centerY - 1 && y < centerY + 1) || (x - 31) ** 2 + (y - centerY) ** 2 <= 2.25) return colors[2];
+            return colors[1];
+        }
+        return colors[0];
+    }
     if (x >= 17 && ((x < 31 && y >= 24 && y < 27) || (x < 26 && y >= 29 && y < 31))) return colors[2];
     if (x >= 12 && x < 36 && y >= 14 && y < 35 && (y >= 18 || x <= 22 + y - 14)) return colors[1];
     return colors[0];
@@ -74,4 +107,5 @@ for (const [index, size] of sizes.entries()) {
 }
 mkdirSync(output, { recursive: true });
 writeFileSync(resolve(output, 'Storage.ico'), Buffer.concat([directory, ...images]));
-console.log(`Generated Storage folder branding: ${sizes.join(', ')}px ICO in ${output}`);
+if (application === 'browser') writeFileSync(resolve(output, 'Storage.png'), images.at(-1));
+console.log(`Generated Storage ${application === 'browser' ? 'folder' : 'engine'} branding: ${sizes.join(', ')}px ICO in ${output}`);

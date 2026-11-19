@@ -5,11 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <ApplicationIcon>../Storage.Browser/Assets/Storage.ico</ApplicationIcon>
+    <ApplicationIcon>Assets/Storage.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Storage.Client/Storage.Client.csproj" />
-    <Content Include="../Storage.Browser/Assets/Storage.ico" Link="Assets/Storage.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets/Storage.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup Condition="Exists('../../../artifacts/native/windows-x64/storage_core.dll')">
     <None Include="../../../artifacts/native/windows-x64/storage_core.dll" Link="storage_core.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

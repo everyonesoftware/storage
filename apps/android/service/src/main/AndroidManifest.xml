@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
  <queries><package android:name="com.everyonesoftware.storage.browser" /></queries>
  <permission android:name="com.everyonesoftware.storage.BIND_STORAGE" android:protectionLevel="signature" />
- <application android:label="Storage Service" android:icon="@drawable/ic_storage" android:dataExtractionRules="@xml/data_extraction_rules" android:allowBackup="false" android:supportsRtl="true">
+ <application android:label="Storage Service" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:dataExtractionRules="@xml/data_extraction_rules" android:allowBackup="false" android:supportsRtl="true">
   <service android:name=".StorageService" android:process=":engine" android:exported="true" android:permission="com.everyonesoftware.storage.BIND_STORAGE" />
  </application>
 </manifest>

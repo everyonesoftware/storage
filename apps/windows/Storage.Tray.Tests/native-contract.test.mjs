@@ -2,12 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const source = name => readFileSync(new URL(`../Storage.Service/${name}`, import.meta.url), 'utf8');
-test('service is a portable GUI apphost with the shared installation icon', () => {
+test('service is a portable GUI apphost with its own engine installation icon', () => {
   const project = source('Storage.Service.csproj');
   assert.match(project, /<OutputType>WinExe<\/OutputType>/);
   assert.match(project, /<TargetFramework>net10\.0<\/TargetFramework>/);
-  assert.match(project, /<ApplicationIcon>\.\.\/Storage.Browser\/Assets\/Storage.ico<\/ApplicationIcon>/);
-  assert.match(project, /Link="Assets\/Storage.ico"/);
+  assert.match(project, /<ApplicationIcon>Assets\/Storage.ico<\/ApplicationIcon>/);
+  assert.match(project, /<Content Include="Assets\/Storage.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"/);
+  assert.doesNotMatch(project, /Storage.Browser\/Assets/);
 });
 test('native adapter binds accessible native buttons, Shell v4, Explorer recovery and keyboard navigation', () => {
   const native = source('NativeTrayWindow.cs');

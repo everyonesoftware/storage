@@ -7,6 +7,38 @@ Two applications, one private repository:
 - `client` — shared AIDL (`IStorage`) and explicit lifecycle-aware binding helper.
 - `denied` — **test fixture only**, not a product APK. A same-signer package with the signature permission but no application grant; its instrumentation must fail to read diagnostics.
 
+## Product icon inventory
+
+- Browser's canonical `browser/src/main/res/drawable/ic_storage.xml` remains the
+  approved folder, unchanged. Service's corresponding canonical vector is the
+  approved two-bay engine. Both use the 48-unit viewport, teal `#006B64` background
+  and `#E8FFFC` foreground. The engine's fixed dots and slots are decorative,
+  **not** live health, availability, or connectivity indicators.
+- Both application manifests use `@mipmap/ic_launcher` for `icon` and `roundIcon`.
+  API-26 adaptive resources use a full-bleed teal background and centered,
+  transparent 108-unit foreground. API-33 resources additionally reference a
+  single-color glyph with transparent detail cutouts for themed icons. The same
+  glyph geometry is preserved inside the central adaptive safe area. Browser has
+  the existing launcher activity; Service intentionally has **no launcher activity**
+  and gains none. Its application icon is used by Android Settings/install surfaces.
+- Browser's root top bar and shared Items/search/Queries empty-state illustration
+  use the untinted canonical folder. Detail/collection navigation retains Back.
+  Settings intentionally has no product header/About panel. Its updater uses text
+  for the two component names, not an embedded product icon. Service has no in-app
+  activity or branding UI. Functional navigation/action/file icons are not product
+  branding and remain unchanged.
+- Neither product currently posts notifications or defines a notification small
+  icon (`Notification.Builder`, `NotificationCompat`, `setSmallIcon`, and
+  `startForeground` have no product-source call sites). No notification channel,
+  foreground-service lifecycle, or permission is added for branding. Future small
+  icons must be transparent, single-color silhouettes, never the opaque full-color
+  application tile or adaptive launcher drawable.
+- The `denied` APK is a non-product authorization fixture; it remains unbranded.
+
+Regression checks: `node --test tests/android-icons.test.mjs`. The existing
+`tests/android-release.test.mjs` imports them so ordinary CI's explicit Android
+release-test command also runs the icon guards; no CI/release workflow is changed.
+
 ## Build
 
 Prerequisites: JDK 21, Android platform/build tools 36, NDK `29.0.14206865`; Gradle wrapper 8.13, AGP 8.13.2, Kotlin 2.2.21, Java 17 bytecode. Local environment:

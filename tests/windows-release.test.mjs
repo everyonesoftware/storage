@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -64,6 +64,87 @@ test('Storage ICO regenerates from product artwork and decodes at every taskbar 
   assert.deepEqual(pixel(Math.floor(size*.35),Math.floor(size*.43)),[232,255,252,255],'Storage folder artwork');
  }
  assert.equal(expectedOffset,icon.length);
+});
+test('Service engine ICO regenerates separately and contains two storage bays at every size', t => {
+ const directory=mkdtempSync(join(process.env.TMPDIR || tmpdir(),'storage-service-icon-'));
+ t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ const result=spawnSync(process.execPath,['scripts/generate-windows-icons.mjs','--application','service','--output-directory',directory],{cwd:root,encoding:'utf8',timeout:30000});
+ assert.equal(result.status,0,result.stdout+result.stderr);
+ const icon=readFileSync(join(directory,'Storage.ico'));
+ assert.deepEqual(icon,readFileSync(join(root,'apps/windows/Storage.Service/Assets/Storage.ico')));
+ const browser=readFileSync(join(root,'apps/windows/Storage.Browser/Assets/Storage.ico'));
+ const sizes=[16,20,24,32,40,48,64,96,128,256];
+ assert.equal(icon.readUInt16LE(0),0); assert.equal(icon.readUInt16LE(2),1);
+ assert.equal(icon.readUInt16LE(4),sizes.length);
+ let expectedOffset=6+16*sizes.length;
+ for(const [index,size] of sizes.entries()) {
+  const entry=6+16*index, length=icon.readUInt32LE(entry+8), offset=icon.readUInt32LE(entry+12);
+  assert.equal(icon[entry]||256,size); assert.equal(icon[entry+1]||256,size);
+  assert.equal(icon.readUInt16LE(entry+4),1); assert.equal(icon.readUInt16LE(entry+6),32);
+  assert.equal(offset,expectedOffset); expectedOffset+=length;
+  const png=icon.subarray(offset,offset+length);
+  assert.deepEqual(png.subarray(0,8),Buffer.from([137,80,78,71,13,10,26,10]));
+  assert.equal(png.readUInt32BE(16),size); assert.equal(png.readUInt32BE(20),size);
+  assert.equal(png[24],8); assert.equal(png[25],6);
+  const compressed=[];
+  for(let p=8;p<png.length;){const n=png.readUInt32BE(p),type=png.toString('ascii',p+4,p+8);if(type==='IDAT')compressed.push(png.subarray(p+8,p+8+n));p+=12+n;assert.ok(p<=png.length);}
+  const pixels=inflateSync(Buffer.concat(compressed));assert.equal(pixels.length,size*(1+size*4));
+  for(let y=0;y<size;y++)assert.equal(pixels[y*(1+size*4)],0);
+  const pixel=(x,y)=>[...pixels.subarray(y*(1+size*4)+1+x*4,y*(1+size*4)+5+x*4)];
+  assert.equal(pixel(0,0)[3],0);
+  assert.deepEqual(pixel(Math.floor(size*.2),Math.floor(size*.6)),[0,107,100,255]);
+  const browserOffset=browser.readUInt32LE(entry+12),browserLength=browser.readUInt32LE(entry+8);
+  assert.notDeepEqual(png,browser.subarray(browserOffset,browserOffset+browserLength),`${size}px must distinguish roles`);
+  if(size===48){
+   for(const y of [15,28])assert.deepEqual(pixel(16,y),[232,255,252,255],'two pale storage bays');
+   for(const y of [18,31]){
+    assert.deepEqual(pixel(20,y),[0,107,100,255],'teal storage slot');
+    assert.deepEqual(pixel(31,y),[0,107,100,255],'teal fixed indicator');
+   }
+   assert.deepEqual(pixel(16,24),[0,107,100,255],'separate bays, not a folder');
+  }
+ }
+ assert.equal(expectedOffset,icon.length);
+});
+test('icon renderer refuses unsupported transforms, alpha, strokes and unknown roles', t => {
+ const directory=mkdtempSync(join(process.env.TMPDIR || tmpdir(),'storage-icon-refusal-'));
+ t.after(()=>rmSync(directory,{recursive:true,force:true}));
+ mkdirSync(join(directory,'scripts'),{recursive:true});
+ writeFileSync(join(directory,'scripts/generate-windows-icons.mjs'),read('scripts/generate-windows-icons.mjs'));
+ for(const application of ['browser','service']){
+  const resource=join(directory,`apps/android/${application}/src/main/res/drawable`);
+  mkdirSync(resource,{recursive:true});
+  const vector=read(`apps/android/${application}/src/main/res/drawable/ic_storage.xml`);
+  for(const modified of [
+   vector.replace('<path','<group android:translateX="2"><path').replace('</vector>','</group></vector>'),
+   vector.replace('<path','<path android:fillAlpha="0.5"'),
+   vector.replace('<path','<path android:strokeWidth="2" android:strokeColor="#FFFFFF"'),
+   vector.replace('<vector ','<vector android:alpha="0.5" '),
+  ]){
+   writeFileSync(join(resource,'ic_storage.xml'),modified);
+   const result=spawnSync(process.execPath,[join(directory,'scripts/generate-windows-icons.mjs'),'--application',application,'--output-directory',join(directory,'out')],{encoding:'utf8',timeout:30000});
+   assert.notEqual(result.status,0,'Unsupported rendering semantics must fail closed');
+   assert.match(result.stderr,/Unsupported Storage icon/);
+  }
+ }
+ const result=spawnSync(process.execPath,['scripts/generate-windows-icons.mjs','--application','unknown','--output-directory',join(directory,'out')],{cwd:root,encoding:'utf8',timeout:30000});
+ assert.notEqual(result.status,0);assert.match(result.stderr,/Application must be browser or service/);
+});
+test('Browser in-app branding uses its generated folder PNG without duplicate PRI entries', () => {
+ const project=read('apps/windows/Storage.Browser/Storage.Browser.csproj');
+ assert.match(project, /<Content Remove="Assets\/Storage.png"/);
+ assert.match(project, /<None Remove="Assets\/Storage.png"/);
+ assert.match(project, /<Content Include="Assets\/Storage.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest"/);
+ const shell=read('apps/windows/Storage.Browser/Shell.xaml'),window=read('apps/windows/Storage.Browser/MainWindow.cs');
+ for(const name of ['TitleBrandIcon','EmptyBrandIcon','AboutBrandIcon']){
+  assert.match(shell,new RegExp(`<Image x:Name="${name}"`));
+  assert.ok(window.includes(`C<Image>("${name}").Source`));
+ }
+ assert.match(window,/new BitmapImage\(new Uri\("ms-appx:\/\/\/Assets\/Storage.png"\)\)/);
+ assert.match(read('scripts/build-windows-installer.ps1'), /'Assets\/Storage.png'/);
+ const icon=readFileSync(join(root,'apps/windows/Storage.Browser/Assets/Storage.ico'));
+ const entry=6+16*(icon.readUInt16LE(4)-1),offset=icon.readUInt32LE(entry+12),length=icon.readUInt32LE(entry+8);
+ assert.deepEqual(readFileSync(join(root,'apps/windows/Storage.Browser/Assets/Storage.png')),icon.subarray(offset,offset+length));
 });
 test('PowerShell scripts parse, and non-Windows execution fails closed', () => {
  for (const script of ['build-windows-installer.ps1','test-windows-installer.ps1']) {

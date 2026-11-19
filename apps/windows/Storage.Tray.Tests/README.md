@@ -39,6 +39,6 @@ The three Node checks were red for console OutputType, the missing native adapte
 - Header shortcut is visually icon-only but keeps its native accessible name and tooltip.
 - The real callback accepts NIN_SELECT, NIN_KEYSELECT and WM_CONTEXTMENU with the version-4 icon-ID packing. No test-only command-line activation exists.
 - Production shortcut resolves only the sibling `Storage.Browser.exe` from the Service layout and passes only `--from-tray`.
-- Icon content: the existing Browser ICO linked/copied as `Assets/Storage.ico` and embedded as the Service application icon.
+- Icon content: Service's own engine ICO copied as `Assets/Storage.ico` and embedded as the Service application icon. The Browser retains its separate folder ICO; Service no longer links Browser artwork.
 
 Windows native UI, accessibility-provider behavior, notification area appearance, Explorer restart, monitor/DPI transitions and installed shutdown still require actual Windows acceptance. Portable tests and linked-source compilation do not establish those outcomes.

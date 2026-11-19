@@ -304,7 +304,7 @@ namespace StorageSmoke {
     try { if(-not [StorageSmoke.Native]::SwitchDesktop($desktop)){throw 'Locked desktop'} } finally { $null=[StorageSmoke.Native]::CloseDesktop($desktop) }
     $mutated=$true
     Invoke-Bounded $installer @('--silent','--installto',$installRoot,'--log',(Join-Path $evidence 'install.log')) 'install' 45
-    foreach ($relative in @('Update.exe','current/resources.pri','current/Storage.Browser.exe','current/Microsoft.UI.Xaml.dll','current/Microsoft.WindowsAppRuntime.dll','current/coreclr.dll','current/hostfxr.dll','current/Service/Storage.Service.exe','current/Service/Assets/Storage.ico','current/Service/storage_core.dll','current/Service/coreclr.dll')) {
+    foreach ($relative in @('Update.exe','current/resources.pri','current/Storage.Browser.exe','current/Assets/Storage.ico','current/Assets/Storage.png','current/Microsoft.UI.Xaml.dll','current/Microsoft.WindowsAppRuntime.dll','current/coreclr.dll','current/hostfxr.dll','current/Service/Storage.Service.exe','current/Service/Assets/Storage.ico','current/Service/storage_core.dll','current/Service/coreclr.dll')) {
         if ((Get-Item -LiteralPath (Join-Path $installRoot $relative)).Length -le 0) { throw "Empty installed payload: $relative" }
     }
     $registration=Get-ItemProperty -LiteralPath $registry

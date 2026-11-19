@@ -1,6 +1,16 @@
 # Windows validation evidence
 
-## Executed successfully in Linux/WSL
+## Folder + engine icons — November 19, 2026
+
+- Observed failing tests for Service's own embedded/copied icon, separate engine generation and Browser's in-app folder binding before implementation. Also observed the limited renderer silently accept transformed artwork before adding fail-closed structure/attribute guards.
+- `node --test tests/windows-release.test.mjs tests/windows-tray.test.mjs`: **28 passed**, zero failures/skips. Both role ICOs deterministically regenerate; every 16–256 px payload decodes, and representative engine bays/slots/dots differ from the folder. Unsupported groups, alpha, strokes and unknown roles are rejected.
+- Ran the complete ordinary CI Node suite with `STORAGE_ANDROID_GRADLE_TESTS=1`: **105 passed**, zero failures/skips, including real Android release-configuration refusal checks.
+- Ran `Storage.Tests` against the actual Linux core successfully. Rebuilt the Windows-target Service/self-contained apphost and Browser with the documented Linux compile-only overrides: both **zero warnings/errors**. Runtime XAML parses with matching typed control lookups.
+- Evaluated Browser `Content,None`: exactly one Content item and zero None duplicates for each of `Assets/Storage.ico` and `Assets/Storage.png`. Both built runtime ICO copies match their respective source files.
+- Independently decoded actual PE resources in Browser's managed assembly and Service's managed assembly/apphost: all **10 ICON payloads per PE** byte-match the appropriate role ICO, with GROUP_ICON present. Inspected rendered actual 16, 32 and 256 px folder/engine PNGs, not just the concept drawings.
+- Rust workspace tests, formatting, warnings-denied Clippy and the real C ABI smoke suite passed. No core/lifecycle/authorization changes were made. Native Windows installed rendering, tray/taskbar/pinned shortcuts and PRI resource resolution remain unverified; no commit/push or publication performed.
+
+## Previous Linux/WSL validation — historical
 
 - SDK: `/opt/data/tools/dotnet/dotnet` reported **10.0.404**.
 - Ran `bash apps/windows/validate-linux.sh /opt/data/code/storage/artifacts/native/linux-x64/libstorage_core.so` against the real shared core.

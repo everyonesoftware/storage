@@ -3,7 +3,7 @@
  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
  <uses-permission android:name="com.everyonesoftware.storage.BIND_STORAGE" />
  <queries><package android:name="com.everyonesoftware.storage.service" /></queries>
- <application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="Storage" android:icon="@drawable/ic_storage" android:dataExtractionRules="@xml/data_extraction_rules" android:allowBackup="false" android:supportsRtl="true">
+ <application android:theme="@android:style/Theme.Material.Light.NoActionBar" android:label="Storage" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:dataExtractionRules="@xml/data_extraction_rules" android:allowBackup="false" android:supportsRtl="true">
   <receiver android:name=".updates.UpdateResultReceiver" android:exported="false" />
   <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
  </application>

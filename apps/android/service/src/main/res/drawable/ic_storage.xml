@@ -1,5 +1,6 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
  <path android:fillColor="#006B64" android:pathData="M8,4h32a4,4 0,0 1,4 4v32a4,4 0,0 1,-4 4H8a4,4 0,0 1,-4 -4V8a4,4 0,0 1,4 -4" />
- <path android:fillColor="#E8FFFC" android:pathData="M12,14h10l4,4h10v17H12z" />
- <path android:fillColor="#006B64" android:pathData="M17,24h14v3H17zM17,29h9v2H17z" />
+ <path android:fillColor="#E8FFFC" android:pathData="M14,13h20a2,2 0,0 1,2 2v6a2,2 0,0 1,-2 2H14a2,2 0,0 1,-2 -2v-6a2,2 0,0 1,2 -2M14,26h20a2,2 0,0 1,2 2v6a2,2 0,0 1,-2 2H14a2,2 0,0 1,-2 -2v-6a2,2 0,0 1,2 -2" />
+ <!-- Fixed decorative drive details, not live health or connectivity indicators. -->
+ <path android:fillColor="#006B64" android:pathData="M16,17h8v2h-8zM16,30h8v2h-8zM32.5,18a1.5,1.5 0,1 0,-3 0a1.5,1.5 0,1 0,3 0M32.5,31a1.5,1.5 0,1 0,-3 0a1.5,1.5 0,1 0,3 0" />
 </vector>

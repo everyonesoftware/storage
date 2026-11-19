@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Storage.Client;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
@@ -37,6 +38,10 @@ public sealed partial class MainWindow : Window
         Content = root; Title = "Storage";
         ExtendsContentIntoTitleBar = true; SetTitleBar(C<Border>("TitleBar"));
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "Assets", "Storage.ico"));
+        var brandIcon = new BitmapImage(new Uri("ms-appx:///Assets/Storage.png"));
+        C<Image>("TitleBrandIcon").Source = brandIcon;
+        C<Image>("EmptyBrandIcon").Source = brandIcon;
+        C<Image>("AboutBrandIcon").Source = brandIcon;
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1360, 900));
         var title = AppWindow.TitleBar;
         title.ButtonBackgroundColor = ColorHelper.FromArgb(255, 23, 33, 41);

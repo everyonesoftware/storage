@@ -10,6 +10,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
@@ -30,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -134,7 +136,7 @@ class MainActivity : ComponentActivity() {
   }
   LaunchedEffect(Unit) { work { api = withContext(Dispatchers.IO) { connection.connect().get(20, TimeUnit.SECONDS) }; refresh() } }
   Scaffold(
-   topBar = { if (page != "Settings") TopAppBar(title = { Column { Text(selected?.optString("name") ?: collection?.optString("name") ?: "Storage", maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold); if (selected == null) Text("Your files. Your local store.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }, navigationIcon = { if (selected != null || collection != null) IconButton(onClick = { if (selected != null) { selected = null; versions = emptyList() } else { collection = null; work { refresh() } } }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } }, actions = { IconButton(enabled = !busy, onClick = { work { if (api == null) api = withContext(Dispatchers.IO) { connection.connect().get(20, TimeUnit.SECONDS) }; refresh() } }) { Icon(Icons.Outlined.Refresh, "Refresh") } }) },
+   topBar = { if (page != "Settings") TopAppBar(title = { Column { Text(selected?.optString("name") ?: collection?.optString("name") ?: "Storage", maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold); if (selected == null) Text("Your files. Your local store.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } }, navigationIcon = { if (selected != null || collection != null) IconButton(onClick = { if (selected != null) { selected = null; versions = emptyList() } else { collection = null; work { refresh() } } }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") } else Image(painterResource(R.drawable.ic_storage), null, Modifier.padding(start = 12.dp).size(36.dp)) }, actions = { IconButton(enabled = !busy, onClick = { work { if (api == null) api = withContext(Dispatchers.IO) { connection.connect().get(20, TimeUnit.SECONDS) }; refresh() } }) { Icon(Icons.Outlined.Refresh, "Refresh") } }) },
    bottomBar = { NavigationBar { listOf("Items" to Icons.Outlined.Folder, "Collections" to Icons.Outlined.CollectionsBookmark, "Queries" to Icons.Outlined.Search, "Devices" to Icons.Outlined.Devices, "Settings" to Icons.Outlined.Settings).forEach { (label, icon) -> NavigationBarItem(selected = page == label, onClick = { page = label; selected = null; collection = null; if (label == "Items") work { refresh() } }, icon = { Icon(icon, label) }, label = { Text(label, maxLines = 1) }, alwaysShowLabel = true) } } },
    floatingActionButton = { if (page == "Items" && selected == null) ExtendedFloatingActionButton(onClick = { versionImport = false; importer.launch(arrayOf("*/*")) }, icon = { Icon(Icons.Outlined.Add, null) }, text = { Text("Import file") }) }
   ) { padding ->
@@ -205,7 +207,7 @@ class MainActivity : ComponentActivity() {
  Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold); content() } }
 }
 @Composable private fun LabelValue(label: String, value: String) { Column { Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant); Text(value, style = MaterialTheme.typography.bodySmall) } }
-@Composable private fun EmptyState(title: String, description: String) { Column(Modifier.fillMaxWidth().padding(horizontal = 36.dp, vertical = 50.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) { Icon(Icons.Outlined.FolderOpen, null, Modifier.size(54.dp), tint = MaterialTheme.colorScheme.primary); Text(title, style = MaterialTheme.typography.headlineSmall); Text(description, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+@Composable private fun EmptyState(title: String, description: String) { Column(Modifier.fillMaxWidth().padding(horizontal = 36.dp, vertical = 50.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) { Image(painterResource(R.drawable.ic_storage), null, Modifier.size(54.dp)); Text(title, style = MaterialTheme.typography.headlineSmall); Text(description, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
 @Composable private fun ItemCard(item: JSONObject, grid: Boolean, onClick: () -> Unit) {
  ElevatedCard(onClick = onClick, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
   Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
