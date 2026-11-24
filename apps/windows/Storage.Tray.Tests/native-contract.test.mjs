@@ -12,7 +12,7 @@ test('service is a portable GUI apphost with its own engine installation icon', 
 });
 test('native adapter binds accessible native buttons, Shell v4, Explorer recovery and keyboard navigation', () => {
   const native = source('NativeTrayWindow.cs');
-  for (const name of ['Open Storage', 'Start service', 'Stop service', 'Restart service', 'Quit Storage Service']) assert.ok(native.includes(name), name);
+  for (const name of ['Browse', 'Open Storage Browser', 'Start service', 'Stop service', 'Restart service', 'Quit Storage Service']) assert.ok(native.includes(name), name);
   for (const api of ['Shell_NotifyIcon', 'TaskbarCreated', 'IsDialogMessage', 'GetMonitorInfo', 'WM_DPICHANGED', 'DrawFocusRect', 'TTM_ADDTOOL', 'NIN_SELECT', 'NIN_KEYSELECT', 'WM_CONTEXTMENU']) assert.ok(native.includes(api), api);
   assert.match(native, /CreateWindowEx\([^\n]*"Button"/);
   assert.match(native, /ArgumentList\.Add\("--from-tray"\)/);

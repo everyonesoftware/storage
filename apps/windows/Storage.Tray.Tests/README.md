@@ -34,9 +34,9 @@ The three Node checks were red for console OutputType, the missing native adapte
 - Host/popup class: `Storage.Service.TrayHost`.
 - Window title: `Storage Service` (initially hidden).
 - Notification callback: `WM_APP + 1` (`0x8001`); icon ID: `1`; `NOTIFYICON_VERSION_4`.
-- Native Button IDs/names: `101` Open Storage; `102` Start service / Stop service; `103` Restart service; `104` Quit Storage Service.
-- Native Static IDs: `105` Storage Service title; `106` actual lifecycle status and any failure detail. `107` is the native **Launch on Startup** checkbox. The normal popup is 304 × 251 logical pixels; no extra Status/helper row is reserved.
-- Header shortcut is visually icon-only but keeps its native accessible name and tooltip.
+- Native Button IDs/names: `101` Browse (tooltip: Open Storage Browser); `102` Start service / Stop service; `103` Restart service; `104` Quit Storage Service; `107` Launch on Startup (drawn as a switch, native auto-checkbox state).
+- Native Static IDs: `105` Storage Service title; `106` actual lifecycle status and any failure detail. The normal popup is 304 × 251 logical pixels; no extra Status/helper row is reserved.
+- On Windows, verify the Browse button and Startup switch at 100% and a scaled DPI. Use mouse and keyboard to open Browser and toggle Startup both ways; check the actual registration after each toggle and reopen the menu to verify display state.
 - The real callback accepts NIN_SELECT, NIN_KEYSELECT and WM_CONTEXTMENU with the version-4 icon-ID packing. No test-only command-line activation exists.
 - Production shortcut resolves only the sibling `Storage.Browser.exe` from the Service layout and passes only `--from-tray`.
 - Icon content: Service's own engine ICO copied as `Assets/Storage.ico` and embedded as the Service application icon. The Browser retains its separate folder ICO; Service no longer links Browser artwork.

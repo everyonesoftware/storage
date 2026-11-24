@@ -28,6 +28,8 @@ internal static class TrayWin32
     [StructLayout(LayoutKind.Sequential)] internal struct CommonControls { internal uint Size, Classes; }
     [StructLayout(LayoutKind.Sequential)] internal struct IconIdentifier { internal uint Size; internal nint Hwnd; internal uint Id; internal Guid Guid; }
     [StructLayout(LayoutKind.Sequential)] internal struct DrawItem { internal uint Type, Id, ItemId, Action, State; internal nint Hwnd, DC; internal Rect Rect; internal nuint Data; }
+    [StructLayout(LayoutKind.Sequential)] internal struct NotifyHeader { internal nint From; internal nuint Id; internal int Code; }
+    [StructLayout(LayoutKind.Sequential)] internal struct CustomDraw { internal NotifyHeader Header; internal uint Stage; internal nint DC; internal Rect Rect; internal nuint Item; internal uint State; internal nint Param; }
     [StructLayout(LayoutKind.Sequential)] internal struct Paint
     {
         internal nint DC; internal int Erase; internal Rect Rect; internal int Restore, Update;
@@ -53,6 +55,8 @@ internal static class TrayWin32
     [DllImport("user32.dll")] internal static extern bool ShowWindow(nint hwnd, int command);
     [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(nint hwnd);
     [DllImport("user32.dll")] internal static extern nint SetFocus(nint hwnd);
+    [DllImport("user32.dll")] internal static extern nint GetFocus();
+    [DllImport("user32.dll")] internal static extern bool IsWindowEnabled(nint hwnd);
     [DllImport("user32.dll")] internal static extern bool IsWindowVisible(nint hwnd);
     [DllImport("user32.dll")] internal static extern bool EnableWindow(nint hwnd, bool enabled);
     [DllImport("user32.dll")] internal static extern bool DestroyWindow(nint hwnd);
@@ -85,7 +89,7 @@ internal static class TrayWin32
     [DllImport("gdi32.dll")] internal static extern nint CreateSolidBrush(uint color);
     [DllImport("gdi32.dll")] internal static extern nint CreatePen(int style, int width, uint color);
     [DllImport("gdi32.dll")] internal static extern nint GetStockObject(int objectId);
-    [DllImport("gdi32.dll")] internal static extern bool Rectangle(nint dc, int left, int top, int right, int bottom);
+    [DllImport("gdi32.dll")] internal static extern bool RoundRect(nint dc, int left, int top, int right, int bottom, int ellipseWidth, int ellipseHeight);
     [DllImport("gdi32.dll")] internal static extern bool Ellipse(nint dc, int left, int top, int right, int bottom);
     [DllImport("gdi32.dll")] internal static extern bool MoveToEx(nint dc, int x, int y, nint previous);
     [DllImport("gdi32.dll")] internal static extern bool LineTo(nint dc, int x, int y);

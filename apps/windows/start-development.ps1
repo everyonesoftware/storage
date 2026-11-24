@@ -8,5 +8,5 @@ $exeHash = (Get-FileHash $browser -Algorithm SHA256).Hash
 $dllHash = (Get-FileHash $assembly -Algorithm SHA256).Hash
 Write-Warning "DEVELOPMENT ONLY: approving this exact unpackaged Browser EXE + DLL. Stop any existing service first. No third-party app is enrolled. Other same-user full-trust software is not sandboxed."
 Start-Process -FilePath $service -WorkingDirectory (Split-Path $service) -ArgumentList @("--dev-browser", "`"$browser`"", "--dev-sha256", $exeHash, "--dev-assembly-sha256", $dllHash)
-Write-Host "The independent background service is starting. Click its tray icon for Start/Stop, Restart, Quit and the Open Storage header shortcut. The service remains runnable without the Browser."
+Write-Host "The independent background service is starting. Click its tray icon for Start/Stop, Restart, Quit and the Browse header button. The service remains runnable without the Browser."
 Start-Process -FilePath $browser -WorkingDirectory (Split-Path $browser)

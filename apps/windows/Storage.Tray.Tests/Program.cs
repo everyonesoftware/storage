@@ -154,6 +154,11 @@ public static class TrayTestSuite
         {
             Check(Marshal.SizeOf<TrayWin32.DrawItem>() == 64, "DRAWITEMSTRUCT size must match native Windows");
             Check(Marshal.OffsetOf<TrayWin32.DrawItem>("DC") == 32, "DRAWITEMSTRUCT hDC offset");
+            Check(Marshal.SizeOf<TrayWin32.NotifyHeader>() == 24, "NMHDR size");
+            Check(Marshal.OffsetOf<TrayWin32.NotifyHeader>("Code") == 16, "NMHDR code offset");
+            Check(Marshal.SizeOf<TrayWin32.CustomDraw>() == 80, "NMCUSTOMDRAW size");
+            Check(Marshal.OffsetOf<TrayWin32.CustomDraw>("DC") == 32, "NMCUSTOMDRAW hdc offset");
+            Check(Marshal.OffsetOf<TrayWin32.CustomDraw>("State") == 64, "NMCUSTOMDRAW uItemState offset");
             Check(Marshal.SizeOf<TrayWin32.NotifyIcon>() == 976, "NOTIFYICONDATAW v4 size");
             Check(Marshal.SizeOf<TrayWin32.WindowClass>() == 80, "WNDCLASSEXW size");
             Check(Marshal.SizeOf<TrayWin32.ToolInfo>() == 72, "TOOLINFOW size");

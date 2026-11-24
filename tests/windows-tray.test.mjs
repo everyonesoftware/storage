@@ -80,10 +80,14 @@ test('the regular Windows harness executes portable lifecycle and Browser activa
   assert.ok(entrypoint.includes('await Storage.Browser.Activation.Tests.ActivationTestSuite.Run();'), 'activation suite must be executed, not merely referenced');
 });
 
-test('header shortcut retains the approved compact title, app-window glyph and no helper row', () => {
+test('header shortcut labels the Browse button without adding a helper row', () => {
   const native = read('apps/windows/Storage.Service/NativeTrayWindow.cs');
   assert.ok(native.includes('Label("Storage Service", 105)'), 'header must use the approved Storage Service title');
-  assert.ok(native.includes('DrawWindowGlyph('), 'shortcut must draw the selected app-window glyph, not an external-link arrow');
+  assert.match(native, /AddButton\(101, BrowseLabel, PushButton\)/);
+  assert.match(native, /BrowseLabel = "Browse"/);
+  assert.match(native, /DrawText\(dc, BrowseLabel,/);
+  assert.match(native, /Text = "Open Storage Browser"/);
+  assert.match(native, /DrawFolder\(dc,/);
   assert.ok(!native.includes('errorLabel'), 'error details belong in the status, not an always-reserved extra row');
   assert.ok(!native.includes('"Status" :'), 'normal status must not introduce a redundant Status label');
 });
@@ -94,12 +98,23 @@ test('OS session shutdown drains within its handler rather than posting an async
   assert.ok(native.includes('controller.EndSession(TimeSpan.FromSeconds(4))'), 'session handler must bound its service drain');
 });
 
-test('the tray exposes a native startup checkbox and uninstall alone clears its registration', () => {
+test('Startup draws as a switch while retaining native toggle semantics', () => {
+  const tray = read('apps/windows/Storage.Service/NativeTrayWindow.cs');
+  assert.match(tray, /StartupLabel = "Launch on Startup"/);
+  assert.match(tray, /AddButton\(StartupId, StartupLabel, CheckBox\)/);
+  assert.match(tray, /DrawStartupSwitch\(draw\.DC, draw\.Rect, ReadStartupCheck\(\),/);
+  assert.match(tray, /int thumbLeft = check \? .* : /);
+  assert.match(tray, /Classes = ICC_STANDARD_CLASSES \| ICC_BAR_CLASSES/);
+  assert.match(read('apps/windows/Storage.Service/Storage.Service.csproj'), /<ApplicationManifest>app\.manifest<\/ApplicationManifest>/);
+  assert.match(read('apps/windows/Storage.Service/app.manifest'), /name="Microsoft\.Windows\.Common-Controls"\s+version="6\.0\.0\.0"/);
+});
+
+test('Startup persists the selected state and uninstall alone clears its registration', () => {
   const tray = read('apps/windows/Storage.Service/NativeTrayWindow.cs');
   const browser = read('apps/windows/Storage.Browser/Program.cs');
-  assert.match(tray, /AddButton\(StartupId, "Launch on Startup", CheckBox\)/);
   assert.match(tray, /case StartupId:\s*SetStartup\(\)/);
   assert.match(tray, /SendMessage\(buttons\[StartupId\], BM_GETCHECK, 0, 0\) == 1/);
+  assert.match(tray, /bool enabled = ReadStartupCheck\(\)/);
   assert.match(tray, /WindowsStartup\.SetEnabled\(executable, enabled\)/);
   assert.match(tray, /ReadStartup\(writeError\);\s*Refresh\(\);/);
   assert.match(browser, /OnBeforeUninstallFastCallback[\s\S]+WindowsStartup\.Remove\(service\)[\s\S]+OnBeforeUpdateFastCallback/);

@@ -17,8 +17,13 @@ internal sealed class NativeTrayWindow : IDisposable
     private const uint Dispatch = 0x8002, WM_DPICHANGED = 0x02e0;
     private const int NIN_SELECT = 0x0400, NIN_KEYSELECT = 0x0401, WM_CONTEXTMENU = 0x007b;
     private const uint TTM_ADDTOOL = 0x0432;
+    private const uint ICC_STANDARD_CLASSES = 0x4000, ICC_BAR_CLASSES = 0x0004;
     private const int StartupId = 107;
-    private const uint CheckBox = 0x03, OwnerDraw = 0x0b; // BS_AUTOCHECKBOX / BS_OWNERDRAW
+    private const uint PushButton = 0x00, CheckBox = 0x03, OwnerDraw = 0x0b;
+    private const int NM_CUSTOMDRAW = -12;
+    private const uint CDDS_PREPAINT = 1;
+    private const int CDRF_SKIPDEFAULT = 4;
+    private const string BrowseLabel = "Browse", StartupLabel = "Launch on Startup";
     private const uint BM_GETCHECK = 0x00f0, BM_SETCHECK = 0x00f1;
     private readonly TrayController controller;
     private readonly string executable = Environment.ProcessPath!;
@@ -48,7 +53,7 @@ internal sealed class NativeTrayWindow : IDisposable
     internal int Run()
     {
         SetThreadDpiAwarenessContext((nint)(-4)); // per-monitor-aware v2; only this STA
-        var controls = new CommonControls { Size = (uint)Marshal.SizeOf<CommonControls>(), Classes = 0xff };
+        var controls = new CommonControls { Size = (uint)Marshal.SizeOf<CommonControls>(), Classes = ICC_STANDARD_CLASSES | ICC_BAR_CLASSES };
         if (!InitCommonControlsEx(ref controls)) throw new Win32Exception();
         background = CreateSolidBrush(Slate);
         highlighted = CreateSolidBrush(Color(52, 67, 78));
@@ -71,14 +76,14 @@ internal sealed class NativeTrayWindow : IDisposable
         DwmSetWindowAttribute(hwnd, 33, ref rounded, 4);
         title = Label("Storage Service", 105);
         statusLabel = Label("Stopped", 106);
-        AddButton(101, "Open Storage");
+        AddButton(101, BrowseLabel, PushButton);
         AddButton(102, "Start service");
         AddButton(103, "Restart service");
-        AddButton(StartupId, "Launch on Startup", CheckBox);
+        AddButton(StartupId, StartupLabel, CheckBox);
         AddButton(104, "Quit Storage Service");
         tooltip = CreateWindowEx(0x80, "tooltips_class32", "", 0x80000000 | 0x01, 0, 0, 0, 0, hwnd, 0, instance, 0);
         if (tooltip == 0) throw new Win32Exception();
-        var tool = new ToolInfo { Size = (uint)Marshal.SizeOf<ToolInfo>(), Flags = 0x01 | 0x10, Hwnd = hwnd, Id = (nuint)buttons[101], Text = "Open Storage" };
+        var tool = new ToolInfo { Size = (uint)Marshal.SizeOf<ToolInfo>(), Flags = 0x01 | 0x10, Hwnd = hwnd, Id = (nuint)buttons[101], Text = "Open Storage Browser" };
         AddTool(tooltip, TTM_ADDTOOL, 0, ref tool);
         dpi = GetDpiForWindow(hwnd);
         ApplyFonts();
@@ -141,12 +146,12 @@ internal sealed class NativeTrayWindow : IDisposable
     private void Move(nint control, int x, int y, int width, int height) => SetWindowPos(control, 0, Px(x), Px(y), Px(width), Px(height), 0x0014);
     private void Layout()
     {
-        Move(title, 50, 17, 194, 20);
-        Move(statusLabel, 64, 40, 180, 19);
-        Move(buttons[101], 254, 20, 34, 34);
+        Move(title, 50, 17, 146, 20);
+        Move(statusLabel, 64, 40, 132, 19);
+        Move(buttons[101], 204, 22, 84, 30);
         Move(buttons[102], 6, 76, 292, 38);
         Move(buttons[103], 6, 114, 292, 38);
-        Move(buttons[StartupId], 16, 152, 272, 38);
+        Move(buttons[StartupId], 6, 152, 292, 38);
         Move(buttons[104], 6, 202, 292, 38);
     }
 
@@ -181,10 +186,12 @@ internal sealed class NativeTrayWindow : IDisposable
         catch (Exception e) when (IsStartupError(e)) { startupError ??= "Cannot read startup setting."; }
         SendMessage(buttons[StartupId], BM_SETCHECK, registeredForStartup ? 1u : 0u, 0);
     }
+    private bool ReadStartupCheck() => SendMessage(buttons[StartupId], BM_GETCHECK, 0, 0) == 1;
     private void SetStartup()
     {
+        if (!startupAvailable) return;
         // BS_AUTOCHECKBOX changes state before notifying the parent of the click.
-        bool enabled = SendMessage(buttons[StartupId], BM_GETCHECK, 0, 0) == 1;
+        bool enabled = ReadStartupCheck();
         string? writeError = null;
         try { WindowsStartup.SetEnabled(executable, enabled); }
         catch (Exception e) when (IsStartupError(e)) { writeError = "Cannot change startup setting: " + e.Message; }
@@ -337,6 +344,12 @@ internal sealed class NativeTrayWindow : IDisposable
                     int id = (int)(wParam & 0xffff);
                     if ((wParam >> 16) == 0 && buttons.TryGetValue(id, out nint button) && lParam == button) Command(id);
                     return 0;
+                case 0x004e when lParam != 0: // WM_NOTIFY
+                    var header = Marshal.PtrToStructure<NotifyHeader>(lParam);
+                    if (header.Code == NM_CUSTOMDRAW && header.Id is 101 or StartupId &&
+                        buttons.TryGetValue((int)header.Id, out nint source) && header.From == source)
+                        return PaintHeaderOrStartup(Marshal.PtrToStructure<CustomDraw>(lParam));
+                    break;
                 case 0x0113: if (wParam == 1) AddIcon(); return 0; // retry Explorer icon registration
                 case 0x0006: if ((wParam & 0xffff) == 0 && !confirming) Hide(); break; // WM_ACTIVATE
                 case 0x0010: Command(104); return 0; // Alt+F4 confirms quit
@@ -400,36 +413,103 @@ internal sealed class NativeTrayWindow : IDisposable
         nint previous = SelectObject(item.DC, font);
         try
         {
-            if (item.Id == 101) DrawWindowGlyph(item.DC, item.Rect, disabled ? Muted : Text);
-            else
-            {
-                string glyph = item.Id switch { 102 => controller.Status == TrayStatus.Running ? "□" : "▶", 103 => "↻", _ => "⏻" };
-                var symbol = new Rect(Px(10), 0, Px(30), item.Rect.Bottom);
-                DrawText(item.DC, glyph, -1, ref symbol, 0x01 | 0x04 | 0x20);
-            }
-            if (item.Id != 101)
-            {
-                string text = item.Id switch { 102 => controller.Status == TrayStatus.Running ? "Stop service" : "Start service", 103 => "Restart service", _ => "Quit Storage Service" };
-                var label = new Rect(Px(44), 0, item.Rect.Right - Px(12), item.Rect.Bottom);
-                DrawText(item.DC, text, -1, ref label, 0x04 | 0x20 | 0x8000);
-            }
+            string glyph = item.Id switch { 102 => controller.Status == TrayStatus.Running ? "□" : "▶", 103 => "↻", _ => "⏻" };
+            var symbol = new Rect(Px(10), 0, Px(30), item.Rect.Bottom);
+            DrawText(item.DC, glyph, -1, ref symbol, 0x01 | 0x04 | 0x20);
+            string text = item.Id switch { 102 => controller.Status == TrayStatus.Running ? "Stop service" : "Start service", 103 => "Restart service", _ => "Quit Storage Service" };
+            var label = new Rect(Px(44), 0, item.Rect.Right - Px(12), item.Rect.Bottom);
+            DrawText(item.DC, text, -1, ref label, 0x04 | 0x20 | 0x8000);
             if (focus) { var outline = new Rect(2, 2, item.Rect.Right - 2, item.Rect.Bottom - 2); DrawFocusRect(item.DC, ref outline); }
         }
         finally { SelectObject(item.DC, previous); }
     }
-    private void DrawWindowGlyph(nint dc, Rect bounds, uint color)
+    private nint PaintHeaderOrStartup(CustomDraw draw)
     {
-        // Vector app-window glyph; no dependency on a font's symbol coverage.
-        int left = (bounds.Right - Px(16)) / 2, top = (bounds.Bottom - Px(14)) / 2;
-        nint pen = CreatePen(0, Math.Max(1, Px(1)), color);
-        nint oldPen = SelectObject(dc, pen), oldBrush = SelectObject(dc, GetStockObject(5)); // NULL_BRUSH
+        if (draw.Stage != CDDS_PREPAINT) return 0;
+        // Paint only: the native push button and auto-checkbox still own input and accessibility.
+        bool focus = GetFocus() == draw.Header.From;
+        bool disabled = !IsWindowEnabled(draw.Header.From);
+        const uint CDIS_SELECTED = 1, CDIS_HOT = 0x40;
+        bool active = !disabled && (draw.State & (CDIS_SELECTED | CDIS_HOT)) != 0;
+        FillRect(draw.DC, ref draw.Rect, background);
+        SetBkMode(draw.DC, 1);
+        nint previous = SelectObject(draw.DC, font);
         try
         {
-            Rectangle(dc, left, top, left + Px(16), top + Px(14));
-            MoveToEx(dc, left, top + Px(4), 0); LineTo(dc, left + Px(16), top + Px(4));
-            MoveToEx(dc, left + Px(5), top + Px(4), 0); LineTo(dc, left + Px(5), top + Px(14));
+            if (draw.Header.Id == 101) DrawBrowse(draw.DC, draw.Rect, focus, active, disabled);
+            else DrawStartupSwitch(draw.DC, draw.Rect, ReadStartupCheck(), focus, active, disabled);
         }
-        finally { SelectObject(dc, oldBrush); SelectObject(dc, oldPen); DeleteObject(pen); }
+        finally { SelectObject(draw.DC, previous); }
+        return CDRF_SKIPDEFAULT;
+    }
+
+    private void DrawBrowse(nint dc, Rect bounds, bool focus, bool active, bool disabled)
+    {
+        uint ink = disabled ? Muted : Color(224, 247, 238);
+        Rounded(dc, bounds, 10, active ? Color(54, 88, 85) : Color(42, 70, 69),
+            focus ? Color(168, 223, 197) : Color(79, 114, 106));
+        DrawFolder(dc, Px(12), (bounds.Bottom - Px(12)) / 2, ink);
+        SetTextColor(dc, ink);
+        var label = new Rect(Px(34), 0, bounds.Right - Px(7), bounds.Bottom);
+        DrawText(dc, BrowseLabel, -1, ref label, 0x04 | 0x20 | 0x8000);
+    }
+
+    private void DrawStartupSwitch(nint dc, Rect bounds, bool check, bool focus, bool active, bool disabled)
+    {
+        uint accent = Color(168, 223, 197);
+        if (active || focus)
+        {
+            var row = new Rect(bounds.Left, bounds.Top + Px(2), bounds.Right, bounds.Bottom - Px(2));
+            Rounded(dc, row, 10, Color(52, 67, 78), focus ? accent : null);
+        }
+        uint ink = disabled ? Muted : Text;
+        int iconTop = (bounds.Bottom - Px(16)) / 2;
+        Stroke(dc, Px(12), iconTop, ink, [(3, 10), (3, 13), (15, 13), (15, 10)]);
+        Stroke(dc, Px(12), iconTop, ink, [(9, 11), (9, 3), (6, 6), (9, 3), (12, 6)]);
+        SetTextColor(dc, ink);
+        var label = new Rect(Px(44), 0, bounds.Right - Px(58), bounds.Bottom);
+        DrawText(dc, StartupLabel, -1, ref label, 0x04 | 0x20 | 0x8000);
+
+        int right = bounds.Right - Px(12), left = right - Px(32);
+        int top = (bounds.Bottom - Px(16)) / 2;
+        uint edge = disabled ? Color(111, 130, 142) : check ? accent : Color(139, 163, 176);
+        uint track = check && !disabled ? accent : Color(39, 55, 68);
+        Rounded(dc, new Rect(left, top, right, top + Px(16)), 16, track, edge);
+        int thumbLeft = check ? right - Px(13) : left + Px(3);
+        Rounded(dc, new Rect(thumbLeft, top + Px(3), thumbLeft + Px(10), top + Px(13)), 10,
+            disabled ? edge : check ? Color(24, 60, 49) : Color(178, 198, 208));
+    }
+
+    private void DrawFolder(nint dc, int x, int y, uint color)
+    {
+        Stroke(dc, x, y, color, [(1, 11), (1, 2), (6, 2), (8, 4), (14, 4), (14, 6)]);
+        Stroke(dc, x, y, color, [(1, 11), (4, 6), (17, 6), (14, 11), (1, 11)]);
+    }
+
+    private void Stroke(nint dc, int x, int y, uint color, ReadOnlySpan<(int X, int Y)> points)
+    {
+        nint pen = CreatePen(0, Math.Max(1, Px(1)), color);
+        nint previous = SelectObject(dc, pen);
+        try
+        {
+            MoveToEx(dc, x + Px(points[0].X), y + Px(points[0].Y), 0);
+            foreach (var point in points[1..]) LineTo(dc, x + Px(point.X), y + Px(point.Y));
+        }
+        finally { SelectObject(dc, previous); DeleteObject(pen); }
+    }
+
+    private void Rounded(nint dc, Rect rect, int diameter, uint fill, uint? stroke = null)
+    {
+        nint brush = CreateSolidBrush(fill);
+        nint pen = stroke is uint edge ? CreatePen(0, Math.Max(1, Px(1)), edge) : GetStockObject(8); // NULL_PEN
+        nint oldBrush = SelectObject(dc, brush), oldPen = SelectObject(dc, pen);
+        try { RoundRect(dc, rect.Left, rect.Top, rect.Right, rect.Bottom, Px(diameter), Px(diameter)); }
+        finally
+        {
+            SelectObject(dc, oldPen); SelectObject(dc, oldBrush);
+            if (stroke.HasValue) DeleteObject(pen);
+            DeleteObject(brush);
+        }
     }
     public void Dispose()
     {
