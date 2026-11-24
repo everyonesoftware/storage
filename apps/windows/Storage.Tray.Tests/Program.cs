@@ -1,5 +1,8 @@
 using Storage.Service;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using Microsoft.Win32;
+using Storage.Client;
 
 namespace Storage.Tray.Tests;
 
@@ -27,12 +30,87 @@ public static class TrayTestSuite
         Console.WriteLine("PASS VersionFourCallbackPreservesSignedAnchors");
         PopupFitsNegativeMonitorAndDpi();
         Console.WriteLine("PASS PopupFitsNegativeMonitorAndDpi");
+        StartupTargetsInstalledServiceOnly();
+        Console.WriteLine("PASS StartupTargetsInstalledServiceOnly");
+        StartupUncheckAfterExternalRemoval();
+        Console.WriteLine("PASS StartupUncheckAfterExternalRemoval");
+        StartupDuplicateEnable();
+        Console.WriteLine("PASS StartupDuplicateEnable");
+        if (OperatingSystem.IsWindows())
+        {
+            StartupRegistrationRoundTrip();
+            Console.WriteLine("PASS StartupRegistrationRoundTrip (Windows registry)");
+        }
         BrowserLaunchHasFixedSiblingTarget();
         Console.WriteLine("PASS BrowserLaunchHasFixedSiblingTarget");
         await DisposalFailurePreventsReplacement();
         Console.WriteLine("PASS DisposalFailurePreventsReplacement");
         NativeStructuresMatchWindowsAbi();
         Console.WriteLine("PASS NativeStructuresMatchWindowsAbi");
+    }
+    private static void StartupTargetsInstalledServiceOnly()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "Storage test " + Guid.NewGuid().ToString("N"));
+        string executable = Path.Combine(root, "current", "Service", "Storage.Service.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(executable)!);
+        try
+        {
+            File.WriteAllText(executable, "fixture");
+            Check(!WindowsStartup.IsInstalledService(executable), "loose development service cannot register");
+            File.WriteAllText(Path.Combine(root, "Update.exe"), "fixture");
+            Check(WindowsStartup.IsInstalledService(executable), "installed current service is eligible");
+            Check(!WindowsStartup.IsInstalledService(Path.Combine(root, "current", "Storage.Browser.exe")), "Browser is not the startup target");
+            Check(WindowsStartup.Command(executable) == $"\"{executable}\"", "command quotes the installed service and passes no consent or Browser arguments");
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+    [SupportedOSPlatform("windows")]
+    private static void StartupRegistrationRoundTrip()
+    {
+        // Exercise the real registry operations without making CI's next sign-in launch anything.
+        string path = @"Software\StorageStartupTest-" + Guid.NewGuid().ToString("N");
+        string service = @"C:\Test Storage\current\Service\Storage.Service.exe";
+        string other = @"C:\Other Storage\current\Service\Storage.Service.exe";
+        try
+        {
+            using (var key = Registry.CurrentUser.CreateSubKey(path))
+            {
+                Check(!WindowsStartup.IsRegistered(key, service), "startup is off before an explicit toggle");
+                WindowsStartup.SetEnabled(key, service, true);
+                Check(key.GetValueKind(WindowsStartup.ValueName) == RegistryValueKind.String, "registration is a literal command");
+            }
+            using var reopened = Registry.CurrentUser.OpenSubKey(path, writable: true)!;
+            Check(WindowsStartup.IsRegistered(reopened, service), "registration survives reopening the key");
+            try { WindowsStartup.SetEnabled(reopened, other, true); throw new Exception("different installation overwrote startup"); }
+            catch (IOException) { }
+            WindowsStartup.SetEnabled(reopened, other, false);
+            Check(WindowsStartup.IsRegistered(reopened, service), "disabling preserves another installation's entry");
+            WindowsStartup.Remove(reopened, other);
+            Check(WindowsStartup.IsRegistered(reopened, service), "uninstall preserves another installation's entry");
+            WindowsStartup.SetEnabled(reopened, service, false);
+            Check(reopened.GetValue(WindowsStartup.ValueName) is null, "disabling removes the matching registration");
+            WindowsStartup.SetEnabled(reopened, service, true);
+            WindowsStartup.Remove(reopened, service);
+            Check(reopened.GetValue(WindowsStartup.ValueName) is null, "uninstall removes the matching registration");
+        }
+        finally { Registry.CurrentUser.DeleteSubKeyTree(path, throwOnMissingSubKey: false); }
+    }
+    private static void StartupUncheckAfterExternalRemoval()
+    {
+        string service = Path.Combine(Path.GetTempPath(), "Storage.Service.exe");
+        object? entry = WindowsStartup.Command(service);
+        entry = null; // Another writer removes the entry after the tray showed it checked.
+        WindowsStartup.SetEnabled(service, false, () => entry, value => entry = value, () => entry = null);
+        Check(entry is null, "unchecking after external removal must not recreate the startup entry");
+    }
+    private static void StartupDuplicateEnable()
+    {
+        string service = Path.Combine(Path.GetTempPath(), "Storage.Service.exe");
+        object? entry = null;
+        void Enable() => WindowsStartup.SetEnabled(service, true, () => entry, value => entry = value, () => entry = null);
+        Enable();
+        Enable();
+        Check(Equals(entry, WindowsStartup.Command(service)), "enabling twice must leave startup enabled");
     }
     private static async Task SessionEndDrainsBeforeReturning()
     {
@@ -109,7 +187,7 @@ public static class TrayTestSuite
     {
         var work = new TrayBounds(-1920, -120, 1920, 1080);
         var bounds = TrayPolicy.Place(-5, 955, 144, work);
-        Check(bounds.Width == 456 && bounds.Height == 319, "approved footer-free 304x213 popup scales at 150 percent DPI");
+        Check(bounds.Width == 456 && bounds.Height == 376, "304x251 popup fits the additional startup row at 150 percent DPI");
         Check(bounds.X >= work.X && bounds.Y >= work.Y && bounds.X + bounds.Width <= 0 && bounds.Y + bounds.Height <= 960, "popup remains inside workarea");
         var small = TrayPolicy.Place(0, 0, 192, new(0, 0, 200, 100));
         Check(small == new TrayBounds(0, 0, 200, 100), "small workarea clamps dimensions and origin");

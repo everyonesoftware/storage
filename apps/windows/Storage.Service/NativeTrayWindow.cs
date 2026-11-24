@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Storage.Client;
 using static Storage.Service.TrayWin32;
 
 namespace Storage.Service;
@@ -16,7 +17,11 @@ internal sealed class NativeTrayWindow : IDisposable
     private const uint Dispatch = 0x8002, WM_DPICHANGED = 0x02e0;
     private const int NIN_SELECT = 0x0400, NIN_KEYSELECT = 0x0401, WM_CONTEXTMENU = 0x007b;
     private const uint TTM_ADDTOOL = 0x0432;
+    private const int StartupId = 107;
+    private const uint CheckBox = 0x03, OwnerDraw = 0x0b; // BS_AUTOCHECKBOX / BS_OWNERDRAW
+    private const uint BM_GETCHECK = 0x00f0, BM_SETCHECK = 0x00f1;
     private readonly TrayController controller;
+    private readonly string executable = Environment.ProcessPath!;
     private readonly WindowProc procedure;
     private readonly ConcurrentQueue<Action> posted = new();
     private readonly Dictionary<int, nint> buttons = new();
@@ -27,8 +32,10 @@ internal sealed class NativeTrayWindow : IDisposable
     private NotifyIcon notification;
     private uint dpi = 96;
     private bool registered, iconAdded, quitting, confirming, operationPending, disposed, positioning;
+    private bool startupAvailable;
     private int anchorX, anchorY;
     private string? uiError;
+    private string? startupError;
     private static uint Color(byte r, byte g, byte b) => (uint)(r | (g << 8) | (b << 16));
     private static readonly uint Slate = Color(32, 44, 53), Text = Color(234, 243, 248), Muted = Color(164, 183, 197);
 
@@ -57,7 +64,7 @@ internal sealed class NativeTrayWindow : IDisposable
         if (RegisterClassEx(ref windowClass) == 0) throw new Win32Exception();
         registered = true;
         hwnd = CreateWindowEx(0x00000080 | 0x00010000, TrayPolicy.WindowClass, TrayPolicy.WindowTitle,
-            0x80000000 | 0x02000000, 0, 0, 304, 213, 0, 0, instance, 0); // tool window, control parent, popup; hidden
+            0x80000000 | 0x02000000, 0, 0, TrayPolicy.Width, TrayPolicy.Height, 0, 0, instance, 0); // tool window, control parent, popup; hidden
         if (hwnd == 0) throw new Win32Exception();
         int dark = 1, rounded = 2;
         DwmSetWindowAttribute(hwnd, 20, ref dark, 4);
@@ -67,6 +74,7 @@ internal sealed class NativeTrayWindow : IDisposable
         AddButton(101, "Open Storage");
         AddButton(102, "Start service");
         AddButton(103, "Restart service");
+        AddButton(StartupId, "Launch on Startup", CheckBox);
         AddButton(104, "Quit Storage Service");
         tooltip = CreateWindowEx(0x80, "tooltips_class32", "", 0x80000000 | 0x01, 0, 0, 0, 0, hwnd, 0, instance, 0);
         if (tooltip == 0) throw new Win32Exception();
@@ -77,6 +85,7 @@ internal sealed class NativeTrayWindow : IDisposable
         Layout();
         controller.Changed += ControllerChanged;
         AddIcon();
+        ReadStartup();
         Refresh();
         Post(() => { if (!quitting) StartAction(() => controller.StartAsync()); });
         while (true)
@@ -112,9 +121,9 @@ internal sealed class NativeTrayWindow : IDisposable
         if (label == 0) throw new Win32Exception();
         return label;
     }
-    private void AddButton(int id, string accessibleName)
+    private void AddButton(int id, string accessibleName, uint style = OwnerDraw)
     {
-        nint button = CreateWindowEx(0, "Button", accessibleName, 0x40000000 | 0x10000000 | 0x00010000 | 0x0000000b, 0, 0, 0, 0, hwnd, (nint)id, instance, 0); // BS_OWNERDRAW + WS_TABSTOP
+        nint button = CreateWindowEx(0, "Button", accessibleName, 0x40000000 | 0x10000000 | 0x00010000 | style, 0, 0, 0, 0, hwnd, (nint)id, instance, 0); // WS_TABSTOP
         if (button == 0) throw new Win32Exception();
         buttons.Add(id, button);
     }
@@ -137,7 +146,8 @@ internal sealed class NativeTrayWindow : IDisposable
         Move(buttons[101], 254, 20, 34, 34);
         Move(buttons[102], 6, 76, 292, 38);
         Move(buttons[103], 6, 114, 292, 38);
-        Move(buttons[104], 6, 164, 292, 38);
+        Move(buttons[StartupId], 16, 152, 272, 38);
+        Move(buttons[104], 6, 202, 292, 38);
     }
 
     private void Refresh()
@@ -148,7 +158,7 @@ internal sealed class NativeTrayWindow : IDisposable
             TrayStatus.Running => "Running", TrayStatus.Starting => "Starting…", TrayStatus.Stopping => "Stopping…",
             TrayStatus.Error => "Error", _ => "Stopped"
         };
-        string? failure = uiError ?? controller.Error;
+        string? failure = uiError ?? controller.Error ?? startupError;
         SetWindowText(statusLabel, failure is null ? text : text + " — " + failure.Replace('\r', ' ').Replace('\n', ' '));
         SetWindowText(buttons[102], status == TrayStatus.Running ? "Stop service" : "Start service");
         bool enabled = !quitting && !operationPending && status is not (TrayStatus.Starting or TrayStatus.Stopping);
@@ -156,11 +166,33 @@ internal sealed class NativeTrayWindow : IDisposable
         EnableWindow(buttons[103], enabled && status == TrayStatus.Running);
         EnableWindow(buttons[104], !quitting);
         EnableWindow(buttons[101], !quitting);
+        EnableWindow(buttons[StartupId], !quitting && startupAvailable);
         notification.Tip = "Storage — " + text;
         if (iconAdded) { notification.Flags = 0x04 | 0x80; Shell_NotifyIcon(1, ref notification); }
         InvalidateRect(hwnd, 0, true);
         foreach (nint button in buttons.Values) InvalidateRect(button, 0, true);
     }
+    private void ReadStartup(string? writeError = null)
+    {
+        startupError = writeError;
+        bool registeredForStartup = false;
+        startupAvailable = WindowsStartup.IsInstalledService(executable);
+        try { registeredForStartup = startupAvailable && WindowsStartup.IsRegistered(executable); }
+        catch (Exception e) when (IsStartupError(e)) { startupError ??= "Cannot read startup setting."; }
+        SendMessage(buttons[StartupId], BM_SETCHECK, registeredForStartup ? 1u : 0u, 0);
+    }
+    private void SetStartup()
+    {
+        // BS_AUTOCHECKBOX changes state before notifying the parent of the click.
+        bool enabled = SendMessage(buttons[StartupId], BM_GETCHECK, 0, 0) == 1;
+        string? writeError = null;
+        try { WindowsStartup.SetEnabled(executable, enabled); }
+        catch (Exception e) when (IsStartupError(e)) { writeError = "Cannot change startup setting: " + e.Message; }
+        // Replace the control's tentative auto-check with the actual registration.
+        ReadStartup(writeError);
+        Refresh();
+    }
+    private static bool IsStartupError(Exception e) => e is IOException or UnauthorizedAccessException or System.Security.SecurityException;
     private void AddIcon()
     {
         notification = new NotifyIcon
@@ -193,7 +225,7 @@ internal sealed class NativeTrayWindow : IDisposable
         dpi = GetDpiForWindow(hwnd);
         var bounds = TrayPolicy.Place(anchorX, anchorY, dpi, new(info.Work.Left, info.Work.Top, info.Work.Right - info.Work.Left, info.Work.Bottom - info.Work.Top));
         SetWindowPos(hwnd, (nint)(-1), bounds.X, bounds.Y, bounds.Width, bounds.Height, 0x0010);
-        ApplyFonts(); Layout(); Refresh();
+        ApplyFonts(); Layout(); ReadStartup(); Refresh();
         ShowWindow(hwnd, 5);
         // Shell callback grants foreground eligibility. HWND remains service-owned; no arbitrary target.
         SetForegroundWindow(hwnd);
@@ -247,6 +279,7 @@ internal sealed class NativeTrayWindow : IDisposable
         if (quitting) return;
         switch (id)
         {
+            case StartupId: SetStartup(); break;
             case 101:
                 try
                 {
@@ -318,9 +351,14 @@ internal sealed class NativeTrayWindow : IDisposable
                 case 0x0014: return 1; // WM_ERASEBKGND, painted below
                 case 0x000f: PaintWindow(window); return 0;
                 case 0x002b: DrawButton(Marshal.PtrToStructure<DrawItem>(lParam)); return 1;
+                case 0x0135 when buttons.TryGetValue(StartupId, out nint startup) && lParam == startup: // WM_CTLCOLORBTN
+                    SetBkColor((nint)wParam, Slate);
+                    SetTextColor((nint)wParam, !quitting && startupAvailable ? Text : Muted);
+                    return background;
                 case 0x0138: // WM_CTLCOLORSTATIC: native labels preserve their accessible text
                     SetBkMode((nint)wParam, 1); SetBkColor((nint)wParam, Slate);
-                    SetTextColor((nint)wParam, lParam == statusLabel ? StatusColor() : lParam == title ? Text : Muted);
+                    SetTextColor((nint)wParam, lParam == statusLabel ? StatusColor() : lParam == title ||
+                        (startupAvailable && !quitting && lParam == buttons.GetValueOrDefault(StartupId)) ? Text : Muted);
                     return background;
             }
         }
@@ -345,7 +383,7 @@ internal sealed class NativeTrayWindow : IDisposable
             GetClientRect(window, out var rect); FillRect(dc, ref rect, background);
             DrawIconEx(dc, Px(18), Px(27), icon, Px(22), Px(22), 0, 0, 3);
             var line = new Rect(Px(12), Px(70), Px(292), Px(71)); FillRect(dc, ref line, divider);
-            line = new Rect(Px(12), Px(158), Px(292), Px(159)); FillRect(dc, ref line, divider);
+            line = new Rect(Px(12), Px(196), Px(292), Px(197)); FillRect(dc, ref line, divider);
             nint dot = CreateSolidBrush(StatusColor());
             nint oldBrush = SelectObject(dc, dot), oldPen = SelectObject(dc, GetStockObject(8)); // NULL_PEN
             try { Ellipse(dc, Px(51), Px(45), Px(59), Px(53)); }

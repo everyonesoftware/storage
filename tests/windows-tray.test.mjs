@@ -93,3 +93,23 @@ test('OS session shutdown drains within its handler rather than posting an async
   assert.ok(/case 0x0016: if \(wParam != 0\) EndSession\(\); return 0;/.test(native), 'WM_ENDSESSION must not return before attempting the bounded drain');
   assert.ok(native.includes('controller.EndSession(TimeSpan.FromSeconds(4))'), 'session handler must bound its service drain');
 });
+
+test('the tray exposes a native startup checkbox and uninstall alone clears its registration', () => {
+  const tray = read('apps/windows/Storage.Service/NativeTrayWindow.cs');
+  const browser = read('apps/windows/Storage.Browser/Program.cs');
+  assert.match(tray, /AddButton\(StartupId, "Launch on Startup", CheckBox\)/);
+  assert.match(tray, /case StartupId:\s*SetStartup\(\)/);
+  assert.match(tray, /SendMessage\(buttons\[StartupId\], BM_GETCHECK, 0, 0\) == 1/);
+  assert.match(tray, /WindowsStartup\.SetEnabled\(executable, enabled\)/);
+  assert.match(tray, /ReadStartup\(writeError\);\s*Refresh\(\);/);
+  assert.match(browser, /OnBeforeUninstallFastCallback[\s\S]+WindowsStartup\.Remove\(service\)[\s\S]+OnBeforeUpdateFastCallback/);
+  assert.match(browser, /OnBeforeUpdateFastCallback\(_ => Storage\.Client\.ServiceLifetime\.StopBundled\(service\)\)/);
+});
+
+test('startup errors are refreshed on reopen and do not hide lifecycle errors', () => {
+  const tray = read('apps/windows/Storage.Service/NativeTrayWindow.cs');
+  assert.match(tray, /failure = uiError \?\? controller\.Error \?\? startupError;/);
+  assert.match(tray, /private void ReadStartup\(string\? writeError = null\)\s*\{\s*startupError = writeError;/);
+  assert.match(tray, /ApplyFonts\(\); Layout\(\); ReadStartup\(\); Refresh\(\);/);
+  assert.match(tray, /catch \(Exception e\) when \(IsStartupError\(e\)\) \{ startupError \?\?= "Cannot read startup setting\."; \}/);
+});

@@ -7,12 +7,13 @@ internal static class TrayPolicy
     internal const string WindowTitle = "Storage Service";
     internal const uint CallbackMessage = 0x8001;
     internal const uint IconId = 1;
+    internal const int Width = 304, Height = 251;
     internal static (int Code, int Id, int X, int Y) Decode(nuint wParam, nint lParam) =>
         ((int)((nuint)lParam & 0xffff), (int)(((nuint)lParam >> 16) & 0xffff), unchecked((short)(wParam & 0xffff)), unchecked((short)((wParam >> 16) & 0xffff)));
     internal static TrayBounds Place(int anchorX, int anchorY, uint dpi, TrayBounds work)
     {
-        int width = Math.Min(work.Width, (int)(304 * dpi / 96));
-        int height = Math.Min(work.Height, (int)(213 * dpi / 96));
+        int width = Math.Min(work.Width, (int)(Width * dpi / 96));
+        int height = Math.Min(work.Height, (int)(Height * dpi / 96));
         return new(Math.Clamp(anchorX - width, work.X, work.X + work.Width - width),
             Math.Clamp(anchorY - height, work.Y, work.Y + work.Height - height), width, height);
     }

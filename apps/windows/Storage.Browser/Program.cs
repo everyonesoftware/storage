@@ -8,7 +8,11 @@ internal static class Program
     {
         string service = Path.Combine(AppContext.BaseDirectory, "Service", "Storage.Service.exe");
         Velopack.VelopackApp.Build().SetAutoApplyOnStartup(false)
-            .OnBeforeUninstallFastCallback(_ => Storage.Client.ServiceLifetime.StopBundled(service))
+            .OnBeforeUninstallFastCallback(_ =>
+            {
+                try { Storage.Client.ServiceLifetime.StopBundled(service); }
+                finally { Storage.Client.WindowsStartup.Remove(service); }
+            })
             .OnBeforeUpdateFastCallback(_ => Storage.Client.ServiceLifetime.StopBundled(service)).Run();
         // A real authorized IPC diagnostic, not a test-only bypass or core shortcut.
         if (args.Length == 2 && args[0] == "--service-health")

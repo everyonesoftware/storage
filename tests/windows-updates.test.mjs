@@ -63,7 +63,7 @@ test('available notes use real on-demand disclosure and a separate retry without
 test('startup autoapply stays disabled and exact bundled-service hooks survive', () => {
   const program = read('Program.cs');
   assert.match(program, /SetAutoApplyOnStartup\(false\)/);
-  for (const hook of ['OnBeforeUninstallFastCallback', 'OnBeforeUpdateFastCallback'])
-    assert.match(program, new RegExp(`${hook}\\(_ => Storage\\.Client\\.ServiceLifetime\\.StopBundled\\(service\\)\\)`));
+  assert.match(program, /OnBeforeUninstallFastCallback\(_ =>\s*\{\s*try \{ Storage\.Client\.ServiceLifetime\.StopBundled\(service\); \}/);
+  assert.match(program, /OnBeforeUpdateFastCallback\(_ => Storage\.Client\.ServiceLifetime\.StopBundled\(service\)\)/);
   assert.match(read('Storage.Browser.csproj'), /PackageReference Include="Velopack" Version="1.2.161"/);
 });

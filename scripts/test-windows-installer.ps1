@@ -14,9 +14,16 @@ $profile = Join-Path $env:LOCALAPPDATA 'Everyonesoftware/Storage'
 $registry = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\StorageWindows'
 $serviceExe = Join-Path $installRoot 'current/Service/Storage.Service.exe'
 $appExe = Join-Path $installRoot 'current/Storage.Browser.exe'
+$startupKey = 'Software\Microsoft\Windows\CurrentVersion\Run'
+$startupValue = 'Everyonesoftware.Storage.Service'
+$startupCommand = '"' + [IO.Path]::GetFullPath($serviceExe) + '"'
 $mutated = $false
-$summary = [ordered]@{ status='failed'; installRoot=$installRoot; installVerified=$false; windowVerified=$false; consentVerified=$false; ipcVerified=$false; uninstallStartedWithRunningService=$false; uninstallVerified=$false; cleanupErrors=@(); failure=$null }
+$summary = [ordered]@{ status='failed'; installRoot=$installRoot; installVerified=$false; windowVerified=$false; consentVerified=$false; ipcVerified=$false; uninstallStartedWithRunningService=$false; startupRegistrationRemoved=$false; uninstallVerified=$false; cleanupErrors=@(); failure=$null }
 function Write-Evidence($Value, [string]$Name) { ConvertTo-Json -InputObject $Value -Depth 8 | Set-Content -LiteralPath (Join-Path $evidence $Name) -Encoding utf8 }
+function Get-StartupRegistration {
+    $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($startupKey)
+    if($null -ne $key) { try { $key.GetValue($startupValue) } finally { $key.Dispose() } }
+}
 function Invoke-Bounded([string]$Executable, [string[]]$Arguments, [string]$Label, [int]$Seconds=35) {
     $info = [Diagnostics.ProcessStartInfo]::new($Executable)
     $info.UseShellExecute=$false; $info.WorkingDirectory=$evidence
@@ -175,6 +182,7 @@ function Save-WindowScreenshot($Window) {
 }
 try {
     if (-not [Environment]::UserInteractive -or (Get-Process -Id $PID).SessionId -eq 0) { throw 'Unlocked interactive desktop required, not assumed on CI' }
+    if ($null -ne (Get-StartupRegistration)) { throw 'Existing Storage startup registration: refusing to modify it' }
     if ((Test-Path -LiteralPath $profile) -or (Test-Path -LiteralPath $registry) -or (Test-Path (Join-Path $env:LOCALAPPDATA 'StorageWindows')) -or @(Get-StorageLinks).Count -or @(Get-Process -Name Storage.Browser,Storage.Service -ErrorAction SilentlyContinue).Count) { throw 'Existing Storage installation/profile/process: refusing to alter personal repositories or other tasks' }
     $installer=(Resolve-Path -LiteralPath $InstallerPath).Path
     Add-Type -AssemblyName System.Windows.Forms,System.Drawing
@@ -304,6 +312,7 @@ namespace StorageSmoke {
     try { if(-not [StorageSmoke.Native]::SwitchDesktop($desktop)){throw 'Locked desktop'} } finally { $null=[StorageSmoke.Native]::CloseDesktop($desktop) }
     $mutated=$true
     Invoke-Bounded $installer @('--silent','--installto',$installRoot,'--log',(Join-Path $evidence 'install.log')) 'install' 45
+    if ($null -ne (Get-StartupRegistration)) { throw 'Installation enabled startup without user opt-in' }
     foreach ($relative in @('Update.exe','current/resources.pri','current/Storage.Browser.exe','current/Assets/Storage.ico','current/Assets/Storage.png','current/Microsoft.UI.Xaml.dll','current/Microsoft.WindowsAppRuntime.dll','current/coreclr.dll','current/hostfxr.dll','current/Service/Storage.Service.exe','current/Service/Assets/Storage.ico','current/Service/storage_core.dll','current/Service/coreclr.dll')) {
         if ((Get-Item -LiteralPath (Join-Path $installRoot $relative)).Length -le 0) { throw "Empty installed payload: $relative" }
     }
@@ -349,11 +358,20 @@ namespace StorageSmoke {
     if($ownedServices.Count -ne 1 -or $ownedServices[0].ProcessId -ne $service.Id){throw 'Expected one healthy task-owned service before uninstall'}
     $summary.uninstallStartedWithRunningService=$true
     $grant=Join-Path $profile 'service-config/bundled-browser-grant.json'; $grantHash=(Get-FileHash -LiteralPath $grant).Hash
+    # Seed the exact opt-in entry to exercise the real uninstall hook; this does not test the tray gesture.
+    $key=[Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($startupKey)
+    try {
+        if($null -ne $key.GetValue($startupValue)){throw 'Unexpected startup registration before the uninstall fixture'}
+        $key.SetValue($startupValue,$startupCommand,[Microsoft.Win32.RegistryValueKind]::String)
+    } finally { $key.Dispose() }
+    if ((Get-StartupRegistration) -cne $startupCommand) { throw 'Startup fixture could not be read back' }
     Invoke-Bounded (Join-Path $installRoot 'Update.exe') @('--uninstall','--silent','--log',(Join-Path $evidence 'uninstall.log')) 'uninstall' 40
     $deadline=[DateTime]::UtcNow.AddSeconds(20)
     do { $remaining=Get-RemainingInstallation; if(-not $remaining.files.Count -and -not $remaining.registryPresent -and -not $remaining.shortcuts.Count -and -not $remaining.processes.Count){break}; Start-Sleep -Milliseconds 500 } while([DateTime]::UtcNow -lt $deadline)
     Write-Evidence $remaining 'uninstall-remaining.json'
     if($remaining.files.Count -or $remaining.registryPresent -or $remaining.shortcuts.Count -or $remaining.processes.Count){throw 'Uninstall left payload/registration/shortcuts/processes'}
+    if($null -ne (Get-StartupRegistration)){throw 'Uninstall left the startup registration'}
+    $summary.startupRegistrationRemoved=$true
     if((Get-FileHash -LiteralPath $grant).Hash -ne $grantHash -or -not (Test-Path (Join-Path $profile 'repository'))){throw 'Uninstall altered service grants/repository state'}
     $summary.uninstallVerified=$true; $summary.status='passed'
 } catch {
@@ -371,6 +389,10 @@ namespace StorageSmoke {
             if(@(Get-OwnedProcesses).Count){throw 'Orphan task-owned process'}
         } catch { $summary.cleanupErrors+="Processes: $_" }
         try {
+            if((Get-StartupRegistration) -ceq $startupCommand) {
+                $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($startupKey,$true)
+                try { if($key.GetValue($startupValue) -ceq $startupCommand){$key.DeleteValue($startupValue,$false)} } finally { $key.Dispose() }
+            }
             if($summary.status -ne 'passed' -and (Test-Path (Join-Path $installRoot 'Update.exe'))){Invoke-Bounded (Join-Path $installRoot 'Update.exe') @('--uninstall','--silent') 'cleanup-uninstall' 30}
             # Only state absent at preflight and created by this isolated test may be removed.
             if(Test-Path -LiteralPath $profile){Remove-Item -LiteralPath $profile -Recurse -Force}

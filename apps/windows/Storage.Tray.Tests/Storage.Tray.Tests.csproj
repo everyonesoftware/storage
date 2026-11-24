@@ -2,5 +2,6 @@
   <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><InvariantGlobalization>true</InvariantGlobalization><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
   <ItemGroup><Compile Include="Program.cs" /></ItemGroup>
   <ItemGroup><Compile Include="../Storage.Service/TrayWin32.cs" Link="TrayWin32.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../Storage.Client/WindowsStartup.cs" Link="WindowsStartup.cs" /></ItemGroup>
   <ItemGroup><Compile Include="../Storage.Service/TrayController.cs" Link="TrayController.cs" /><Compile Include="../Storage.Service/TrayPolicy.cs" Link="TrayPolicy.cs" /></ItemGroup>
 </Project>
