@@ -32,8 +32,20 @@ static class SettingsSourceTests
         FeedTests.Require(sidebar.Attribute("Padding")?.Value == "12,22,12,16" && !sidebar.Descendants().Any(e => e.Attribute("Text")?.Value == "YOUR WORKSPACE"), "Refined sidebar starts directly with navigation at 12px horizontal / 22px top padding");
         FeedTests.Require(Named("WorkspaceContent").Attribute("Padding")?.Value == "28,22,28,26" && Named("Heading").Attribute("FontSize")?.Value == "28", "Refined main padding and 28px page title");
         var content = Named("SettingsContent");
-        FeedTests.Require(content.Attribute("MaxWidth")?.Value == "720" && !content.Elements().Any(e => e.Name.LocalName == "TextBlock"), "Refined Settings begins with Updates, without the grouped-variant subtitle");
-        FeedTests.Require(Named("SettingsPanel").Attribute("Margin")?.Value == "0,24,0,0", "Exactly one 24px page-title-to-Updates gap (workspace row spacing is zero in Settings)");
+        var viewport = Named("SettingsPanel");
+        var layout = viewport.Elements().Single();
+        FeedTests.Require(viewport.Attribute("HorizontalScrollBarVisibility")?.Value == "Disabled" &&
+            viewport.Attribute("HorizontalScrollMode")?.Value == "Disabled" &&
+            viewport.Attribute("HorizontalContentAlignment")?.Value == "Stretch" &&
+            layout.Name.LocalName == "Grid" && layout.Attribute("MaxWidth") is null &&
+            layout.Attribute("HorizontalAlignment")?.Value == "Stretch",
+            "Settings uses a full-width vertical scrolling surface so showing update progress cannot shift its horizontal origin");
+        var column = layout.Element(layout.Name.Namespace + "Grid.ColumnDefinitions")?.Elements().Single();
+        FeedTests.Require(column?.Attribute("Width")?.Value == "*" && column.Attribute("MaxWidth")?.Value == "720" &&
+            content.Parent == layout && content.Attribute("MaxWidth") is null && content.Attribute("HorizontalAlignment")?.Value == "Stretch",
+            "Settings cards fill a leading column bounded by the viewport and capped at 720 DIPs independently of update state");
+        FeedTests.Require(!content.Elements().Any(e => e.Name.LocalName == "TextBlock"), "Refined Settings begins with Updates, without the grouped-variant subtitle");
+        FeedTests.Require(viewport.Attribute("Margin")?.Value == "0,24,0,0", "Exactly one 24px page-title-to-Updates gap (workspace row spacing is zero in Settings)");
         foreach (string heading in new[] { "Updates", "Local service", "About Storage" })
             FeedTests.Require(content.Descendants().Any(e => e.Attribute("Text")?.Value == heading && e.Attribute("Style")?.Value == "{StaticResource SettingsSection}"), "Windows retains refined section: " + heading);
         Console.WriteLine("PASS selected refined sidebar, main/title geometry, subtitle-free Settings and all three Windows sections");

@@ -36,7 +36,7 @@ test('native harness includes cached-package integrity behaviors against the act
 });
 test('Settings reclaims the inspector column, anchors icon navigation, and groups compact native content', () => {
   const xaml = read('Shell.xaml'), main = read('MainWindow.cs');
-  assert.match(xaml, /x:Name="SettingsContent"[^>]*MaxWidth="720"/);
+  assert.match(xaml, /x:Name="SettingsContent"/);
   assert.match(xaml, /<Button[^>]*Grid.Row="2"[^>]*x:Name="SettingsNav"/);
   for (const label of ['All items', 'Collections', 'Settings']) assert.match(xaml, new RegExp(`AutomationProperties.Name="${label}"`));
   for (const name of ['InspectorHost', 'WorkspaceContent', 'WorkspaceColumns', 'ServiceRepository', 'ServiceDetails', 'TechnicalDetails', 'SecurityDetails']) assert.match(xaml, new RegExp(`x:Name="${name}"`));
