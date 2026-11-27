@@ -44,4 +44,16 @@ val compileDescriptorIo by tasks.registering {
 }
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("JniLibFolders") && !it.name.contains("AndroidTest") }.configureEach { dependsOn(copyNativeLibs, compileDescriptorIo) }
 apply(from = rootProject.file("release.gradle"))
-dependencies { implementation(project(":client")); testImplementation("junit:junit:4.13.2"); androidTestImplementation("androidx.test:runner:1.6.2"); androidTestImplementation("androidx.test:rules:1.6.1"); androidTestImplementation("androidx.test.ext:junit:1.2.1") }
+dependencies {
+ implementation(project(":client"))
+ implementation("androidx.activity:activity:1.11.0")
+ val cameraVersion = "1.5.1"
+ implementation("androidx.camera:camera-camera2:$cameraVersion")
+ implementation("androidx.camera:camera-lifecycle:$cameraVersion")
+ implementation("androidx.camera:camera-view:$cameraVersion")
+ implementation("com.google.zxing:core:3.5.3")
+ testImplementation("junit:junit:4.13.2")
+ androidTestImplementation("androidx.test:runner:1.6.2")
+ androidTestImplementation("androidx.test:rules:1.6.1")
+ androidTestImplementation("androidx.test.ext:junit:1.2.1")
+}

@@ -1,5 +1,6 @@
 using Storage.Client;
 using System.Runtime.Versioning;
+using Storage.Service.Pairing;
 namespace Storage.Service;
 internal static class Program
 {
@@ -56,7 +57,8 @@ internal static class Program
                 token.ThrowIfCancellationRequested();
                 await WindowsHost.RunAsync(new ServiceSession(core, stage), development, token, ready);
             });
-            using var tray = new NativeTrayWindow(controller);
+            var pairing = new PairingManager(Path.Combine(home, "pairing"));
+            using var tray = new NativeTrayWindow(controller, pairing);
             var stopRegistration = ThreadPool.RegisterWaitForSingleObject(stopEvent, (_, _) => tray.RequestQuit(), null, Timeout.Infinite, true);
             try
             {

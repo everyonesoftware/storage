@@ -186,7 +186,7 @@ class MainActivity : ComponentActivity() {
      page == "Devices" -> LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
       item { Text("This device", style = MaterialTheme.typography.headlineMedium) }
       item { Section("Storage Service diagnostics") { health?.let { h -> LabelValue("Status", h.getString("status")); LabelValue("Device ID", h.getString("deviceId")); LabelValue("Data store ID", h.getString("dataStoreId")); LabelValue("Items", h.getLong("itemCount").toString()); LabelValue("Versions", h.getLong("versionCount").toString()) } ?: Text("Service not connected") } }
-      item { Section("Networking") { Text("Pairing and replication are not implemented. No paired devices are reported.") } }
+      item { Section("Networking") { Text("Open the Storage Service app to pair this device with a Windows PC. File replication is not available in this build.") } }
      }
      page == "Settings" -> LazyColumn(contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
       item { Text("Settings", style = MaterialTheme.typography.headlineMedium) }

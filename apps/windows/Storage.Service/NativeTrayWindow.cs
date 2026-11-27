@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Storage.Client;
+using Storage.Service.Pairing;
 using static Storage.Service.TrayWin32;
 
 namespace Storage.Service;
@@ -18,7 +19,7 @@ internal sealed class NativeTrayWindow : IDisposable
     private const int NIN_SELECT = 0x0400, NIN_KEYSELECT = 0x0401, WM_CONTEXTMENU = 0x007b;
     private const uint TTM_ADDTOOL = 0x0432;
     private const uint ICC_STANDARD_CLASSES = 0x4000, ICC_BAR_CLASSES = 0x0004;
-    private const int StartupId = 107;
+    private const int StartupId = 107, DevicesId = 108;
     private const uint PushButton = 0x00, CheckBox = 0x03, OwnerDraw = 0x0b;
     private const int NM_CUSTOMDRAW = -12;
     private const uint CDDS_PREPAINT = 1;
@@ -26,6 +27,7 @@ internal sealed class NativeTrayWindow : IDisposable
     private const string BrowseLabel = "Browse", StartupLabel = "Launch on Startup";
     private const uint BM_GETCHECK = 0x00f0, BM_SETCHECK = 0x00f1;
     private readonly TrayController controller;
+    private readonly PairingWindow pairingWindow;
     private readonly string executable = Environment.ProcessPath!;
     private readonly WindowProc procedure;
     private readonly ConcurrentQueue<Action> posted = new();
@@ -44,9 +46,10 @@ internal sealed class NativeTrayWindow : IDisposable
     private static uint Color(byte r, byte g, byte b) => (uint)(r | (g << 8) | (b << 16));
     private static readonly uint Slate = Color(32, 44, 53), Text = Color(234, 243, 248), Muted = Color(164, 183, 197);
 
-    internal NativeTrayWindow(TrayController controller)
+    internal NativeTrayWindow(TrayController controller, PairingManager pairing)
     {
         this.controller = controller;
+        pairingWindow = new PairingWindow(pairing, Post, () => !quitting && !operationPending && controller.Status == TrayStatus.Running);
         procedure = WindowMessage;
     }
 
@@ -79,6 +82,7 @@ internal sealed class NativeTrayWindow : IDisposable
         AddButton(101, BrowseLabel, PushButton);
         AddButton(102, "Start service");
         AddButton(103, "Restart service");
+        AddButton(DevicesId, "Devices");
         AddButton(StartupId, StartupLabel, CheckBox);
         AddButton(104, "Quit Storage Service");
         tooltip = CreateWindowEx(0x80, "tooltips_class32", "", 0x80000000 | 0x01, 0, 0, 0, 0, hwnd, 0, instance, 0);
@@ -98,9 +102,10 @@ internal sealed class NativeTrayWindow : IDisposable
             int result = GetMessage(out var message, 0, 0, 0);
             if (result == 0) return 0;
             if (result < 0) throw new Win32Exception();
+            if (pairingWindow.HandleMessage(ref message)) continue;
             if (message.Id == 0x0100 && IsWindowVisible(hwnd))
             {
-                if (message.WParam == 0x1b) { Hide(); continue; }
+                if (message.WParam == 0x1b && (message.Hwnd == hwnd || IsChild(hwnd, message.Hwnd))) { Hide(); continue; }
                 if (message.WParam == 0x0d && buttons.Values.Contains(message.Hwnd))
                 { SendMessage(message.Hwnd, 0x00f5, 0, 0); continue; } // BM_CLICK the focused native button
             }
@@ -149,15 +154,17 @@ internal sealed class NativeTrayWindow : IDisposable
         Move(title, 50, 17, 146, 20);
         Move(statusLabel, 64, 40, 132, 19);
         Move(buttons[101], 204, 22, 84, 30);
-        Move(buttons[102], 6, 76, 292, 38);
-        Move(buttons[103], 6, 114, 292, 38);
-        Move(buttons[StartupId], 6, 152, 292, 38);
+        Move(buttons[102], 6, 76, 292, 30);
+        Move(buttons[103], 6, 106, 292, 30);
+        Move(buttons[DevicesId], 6, 136, 292, 30);
+        Move(buttons[StartupId], 6, 166, 292, 30);
         Move(buttons[104], 6, 202, 292, 38);
     }
 
     private void Refresh()
     {
         var status = controller.Status;
+        if (status != TrayStatus.Running) pairingWindow.Close();
         string text = status switch
         {
             TrayStatus.Running => "Running", TrayStatus.Starting => "Starting…", TrayStatus.Stopping => "Stopping…",
@@ -169,6 +176,7 @@ internal sealed class NativeTrayWindow : IDisposable
         bool enabled = !quitting && !operationPending && status is not (TrayStatus.Starting or TrayStatus.Stopping);
         EnableWindow(buttons[102], enabled);
         EnableWindow(buttons[103], enabled && status == TrayStatus.Running);
+        EnableWindow(buttons[DevicesId], enabled && status == TrayStatus.Running);
         EnableWindow(buttons[104], !quitting);
         EnableWindow(buttons[101], !quitting);
         EnableWindow(buttons[StartupId], !quitting && startupAvailable);
@@ -242,7 +250,7 @@ internal sealed class NativeTrayWindow : IDisposable
     private void StartAction(Func<Task> action)
     {
         if (operationPending || quitting) return;
-        operationPending = true; uiError = null; Refresh();
+        operationPending = true; pairingWindow.Close(); uiError = null; Refresh();
         _ = ObserveActionAsync(action);
     }
     private async Task ObserveActionAsync(Func<Task> action)
@@ -255,7 +263,7 @@ internal sealed class NativeTrayWindow : IDisposable
     private void BeginQuit()
     {
         if (quitting) return;
-        quitting = true; Refresh();
+        quitting = true; pairingWindow.Close(); Refresh();
         _ = DrainAndExitAsync();
     }
     private async Task DrainAndExitAsync()
@@ -269,7 +277,7 @@ internal sealed class NativeTrayWindow : IDisposable
     }
     private void EndSession()
     {
-        quitting = true;
+        quitting = true; pairingWindow.Close();
         try
         {
             if (!controller.EndSession(TimeSpan.FromSeconds(4)))
@@ -287,6 +295,10 @@ internal sealed class NativeTrayWindow : IDisposable
         switch (id)
         {
             case StartupId: SetStartup(); break;
+            case DevicesId when !operationPending && controller.Status == TrayStatus.Running:
+                pairingWindow.Show(new Point { X = anchorX, Y = anchorY }, icon);
+                Hide();
+                break;
             case 101:
                 try
                 {
@@ -413,10 +425,10 @@ internal sealed class NativeTrayWindow : IDisposable
         nint previous = SelectObject(item.DC, font);
         try
         {
-            string glyph = item.Id switch { 102 => controller.Status == TrayStatus.Running ? "□" : "▶", 103 => "↻", _ => "⏻" };
+            string glyph = item.Id switch { 102 => controller.Status == TrayStatus.Running ? "□" : "▶", 103 => "↻", DevicesId => "▣", _ => "⏻" };
             var symbol = new Rect(Px(10), 0, Px(30), item.Rect.Bottom);
             DrawText(item.DC, glyph, -1, ref symbol, 0x01 | 0x04 | 0x20);
-            string text = item.Id switch { 102 => controller.Status == TrayStatus.Running ? "Stop service" : "Start service", 103 => "Restart service", _ => "Quit Storage Service" };
+            string text = item.Id switch { 102 => controller.Status == TrayStatus.Running ? "Stop service" : "Start service", 103 => "Restart service", DevicesId => "Devices", _ => "Quit Storage Service" };
             var label = new Rect(Px(44), 0, item.Rect.Right - Px(12), item.Rect.Bottom);
             DrawText(item.DC, text, -1, ref label, 0x04 | 0x20 | 0x8000);
             if (focus) { var outline = new Rect(2, 2, item.Rect.Right - 2, item.Rect.Bottom - 2); DrawFocusRect(item.DC, ref outline); }
@@ -515,6 +527,7 @@ internal sealed class NativeTrayWindow : IDisposable
     {
         if (disposed) return;
         Volatile.Write(ref disposed, true);
+        pairingWindow.Dispose();
         controller.Changed -= ControllerChanged;
         if (iconAdded) { Shell_NotifyIcon(2, ref notification); iconAdded = false; }
         if (hwnd != 0) { KillTimer(hwnd, 1); DestroyWindow(hwnd); hwnd = 0; }

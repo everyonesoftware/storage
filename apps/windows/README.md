@@ -7,7 +7,21 @@
 - `Storage.Browser`: native WinUI 3, runtime-loaded embedded XAML, Music-style native drag title area and caption buttons. Neutral slate + blue/teal product styling. File picker and drag/drop import, local search, grid/list, generated attributes, item/policy revisions, properties, immutable version history, historical/current export, new versions, rename, collection creation/membership and bounded UTF-8 text preview (text/*, at most 64 KiB). All displayed items and counts come from the service. Settings has a user-initiated Velopack update flow: check, download with progress, then explicit restart/install. It displays the real assembly informational version and never reports a failed network/integrity check as up-to-date.
 - `Storage.Tests`: dependency-free .NET 10 executable assertions. Linux named-pipe harness uses the same framing, dispatcher, SDK and real native library. It deliberately does **not** exercise or impersonate Windows production identity checks.
 
-`contracts/first-slice.md` is the integration authority. The internal core ABI is not the public wire protocol. This build is local-only: no device pairing, replication, remote authority, placement policy or saved-query claims.
+`contracts/first-slice.md` is the integration authority for local storage. The internal core ABI is not the public wire protocol. Windows device enrollment is a separate Service workflow; the Browser and repository are still local-only. No remote authority, replication, placement policy or saved-query claims.
+
+## Pair two Windows PCs
+
+1. On the PC that will host the Storage network, open the Storage Service tray icon, choose **Devices**, then **Add device**. Leave the window open.
+2. On the second PC, open **Devices → Join a network**. Choose the hosting PC from the nearby list. If it does not appear, use **Enter address manually** with the hostname or local IPv4 address shown on the hosting PC. A manual address only bypasses discovery; the connection must still be reachable.
+3. Compare the device names and six-digit codes on both screens. Confirm the match on the joining PC and choose **Approve device** on the hosting PC. If the codes differ, cancel and start again. The code is not a password or a typed invitation.
+
+Use a trusted local IPv4 network. Nearby discovery uses UDP 48554 and enrollment uses TCP 48553. The app does not open firewall rules or use a cloud relay. If discovery is blocked but TCP is reachable, use the manual IPv4 address. If the connection drops at the end, check **Devices** on both PCs before deciding whether to retry. Successful pairing saves device trust, not files, folder shares or ongoing online status.
+
+## Add an Android phone
+
+1. In the Windows Storage Service tray menu, open **Devices → Add Android phone**. Select the PC's IPv4 address on the same local network as the phone, then choose **Show pairing QR**.
+2. Open Storage Service on Android 10 or later and scan the QR. The QR is single-use and expires within three minutes. Don't share or save the image.
+3. Compare the six-digit codes on both devices. Confirm the match on the phone and choose **Approve device** on Windows. If scanning is unavailable, cancel the QR offer and start **Add device** on Windows; then enter the host's IPv4 address in Android Storage Service. Manual entry does not bypass the local network or firewall requirements.
 
 ## Security and authorization (important)
 

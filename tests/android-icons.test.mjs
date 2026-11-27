@@ -55,7 +55,15 @@ for (const [app, geometry] of Object.entries(family)) {
       ]);
       else assert.deepEqual(paths(xml), [{ fillColor: '#FFFFFFFF', fillType: 'evenOdd', pathData: geometry.shape + geometry.details }]);
     }
-    if (app === 'service') assert.doesNotMatch(manifest, /<activity|android.intent.category.LAUNCHER/);
+    if (app === 'service') {
+      const launchers = [...manifest.matchAll(/<activity\b([^>]*)>([\s\S]*?)<\/activity>/g)]
+        .filter(([, , body]) => body.includes('android.intent.category.LAUNCHER'));
+      assert.equal(launchers.length, 1, 'only the device pairing activity may be a launcher');
+      assert.match(launchers[0][1], /android:name="\.pairing\.ui\.PairingActivity"/);
+      assert.match(launchers[0][1], /android:exported="true"/);
+      assert.match(launchers[0][2], /android:name="android\.intent\.action\.MAIN"/);
+      assert.doesNotMatch(manifest, /<activity-alias\b/);
+    }
   });
 }
 

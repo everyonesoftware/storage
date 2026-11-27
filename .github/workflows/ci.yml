@@ -229,6 +229,13 @@ jobs:
           Copy-Item (Join-Path $env:CARGO_TARGET_DIR 'x86_64-pc-windows-msvc/release/storage_core.dll') artifacts/native/windows-x64/storage_core.dll
           dotnet run --project apps/windows/Storage.Tests --configuration Release -- (Resolve-Path artifacts/native/windows-x64/storage_core.dll).Path
           if ($LASTEXITCODE -ne 0) { throw 'Native Windows client/service assertions failed.' }
+      - name: Test Windows peer pairing and protected identity
+        shell: pwsh
+        run: |
+          foreach ($suite in @('Protocol', 'Discovery', 'State', 'Window')) {
+            dotnet run --project "apps/windows/Storage.Pairing.$suite.Tests" --configuration Release
+            if ($LASTEXITCODE -ne 0) { throw "Windows pairing $suite assertions failed." }
+          }
       - name: Test Windows release and installer contracts
         run: node --test tests/windows-release.test.mjs tests/windows-updates.test.mjs
       - name: Build complete native Windows installer and update inventory

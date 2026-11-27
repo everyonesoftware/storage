@@ -37,6 +37,9 @@ run_restart_tests() (
 )
 run_restart_tests
 run_test service-binder com.everyonesoftware.storage.service com.everyonesoftware.storage.service.StorageBinderTest 8
+adb -s "$serial" shell pm revoke com.everyonesoftware.storage.service android.permission.CAMERA
+adb -s "$serial" shell pm clear-permission-flags com.everyonesoftware.storage.service android.permission.CAMERA user-set user-fixed
+run_test service-pairing com.everyonesoftware.storage.service com.everyonesoftware.storage.service.PairingActivityTest 7
 run_test denied-caller com.everyonesoftware.storage.denied com.everyonesoftware.storage.denied.DeniedCallerTest 1
 adb -s "$serial" shell am force-stop com.everyonesoftware.storage.browser
 run_test cold-seed com.everyonesoftware.storage.service com.everyonesoftware.storage.service.ColdRestartTest 1 -e phase seed

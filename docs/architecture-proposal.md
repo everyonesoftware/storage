@@ -117,6 +117,8 @@ The service is bound while clients are active, persists durable jobs, and uses a
 
 ### Pairing
 
+The native enrollment slice uses [the service-private device pairing contract](../contracts/device-pairing.md) for LAN discovery, manual addressing and Android QR interoperability. Its device records do not implement the replication or authority roadmap below.
+
 1. Windows service creates a short-lived single-use offer, shown by its trusted UI as a QR code.
 2. QR includes protocol/network identity, connection hints, a pinned service public-key fingerprint, expiry and a high-entropy bootstrap secret. Connection hints are not exposed in the application Storage API.
 3. Android service generates its own device key and connects to the pinned Windows endpoint.

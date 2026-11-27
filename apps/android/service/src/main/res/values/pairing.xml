@@ -1,0 +1,37 @@
+<resources>
+    <string name="pairing_app_name">Storage Service</string>
+    <string name="pairing_devices">Your devices</string>
+    <string name="pairing_intro">Connect this phone to a Windows PC running Storage Service. Pairing does not sync or transfer files.</string>
+    <string name="pairing_loading">Checking paired devices…</string>
+    <string name="pairing_no_devices">No paired Windows PC.</string>
+    <string name="pairing_list_failed">Couldn’t read the paired devices. Try refreshing the list before pairing again.</string>
+    <string name="pairing_refresh">Refresh paired devices</string>
+    <string name="pairing_device">%1$s · Paired Windows PC</string>
+    <string name="pairing_scan">Scan QR code</string>
+    <string name="pairing_requires_android_10">Pairing requires Android 10 or later.</string>
+    <string name="pairing_manual">Enter address manually</string>
+    <string name="pairing_manual_title">Enter the PC’s address</string>
+    <string name="pairing_manual_instructions">On the PC, open Storage Service and choose Add device. Use the hostname or IP address shown there. Both devices must be on the same local network.</string>
+    <string name="pairing_address">PC hostname or IP address</string>
+    <string name="pairing_address_error">Enter the Windows PC hostname or IP address.</string>
+    <string name="pairing_connect">Connect</string>
+    <string name="pairing_scan_instructions">On the PC, open Storage Service and choose Add Android phone. Point the camera at the QR code.</string>
+    <string name="pairing_not_offer">That isn’t a Storage pairing QR code.</string>
+    <string name="pairing_camera_unavailable">The camera is unavailable. You can still enter the PC’s address manually.</string>
+    <string name="pairing_camera_denied">Camera access wasn’t granted. You can still enter the PC’s address manually.</string>
+    <string name="pairing_connecting">Connecting to the Windows PC…</string>
+    <string name="pairing_confirm">Do these codes match?</string>
+    <string name="pairing_confirm_instructions">Check that this code matches the one shown by Storage Service on %1$s. Approve on both devices only if the codes match.</string>
+    <string name="pairing_accessible_code">Confirmation code: %1$s</string>
+    <string name="pairing_match">Codes match</string>
+    <string name="pairing_mismatch">Codes don’t match</string>
+    <string name="pairing_waiting">Waiting for pairing to complete…</string>
+    <string name="pairing_cancel">Cancel</string>
+    <string name="pairing_cancelled">Pairing cancelled.</string>
+    <string name="pairing_declined">Pairing was declined. No trust was added by this attempt.</string>
+    <string name="pairing_failed_manual">Couldn’t pair with the PC. Check the address, the local network, and the Add device screen on the PC.</string>
+    <string name="pairing_failed_scan">Couldn’t pair with this QR code. Check the local network and request a new code on the PC.</string>
+    <string name="pairing_uncertain">Pairing could not be confirmed. Check the device lists on both devices before trying again.</string>
+    <string name="pairing_success">Device paired.</string>
+    <style name="Theme.StorageService" parent="android:style/Theme.Material.Light.NoActionBar" />
+</resources>

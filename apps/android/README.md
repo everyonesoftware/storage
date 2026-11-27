@@ -19,13 +19,12 @@ Two applications, one private repository:
   transparent 108-unit foreground. API-33 resources additionally reference a
   single-color glyph with transparent detail cutouts for themed icons. The same
   glyph geometry is preserved inside the central adaptive safe area. Browser has
-  the existing launcher activity; Service intentionally has **no launcher activity**
-  and gains none. Its application icon is used by Android Settings/install surfaces.
+  its existing launcher activity. The Storage Service launcher opens only the
+  device pairing screen and uses the engine icon.
 - Browser's root top bar and shared Items/search/Queries empty-state illustration
   use the untinted canonical folder. Detail/collection navigation retains Back.
   Settings intentionally has no product header/About panel. Its updater uses text
-  for the two component names, not an embedded product icon. Service has no in-app
-  activity or branding UI. Functional navigation/action/file icons are not product
+  for the two component names, not an embedded product icon. Functional navigation/action/file icons are not product
   branding and remain unchanged.
 - Neither product currently posts notifications or defines a notification small
   icon (`Notification.Builder`, `NotificationCompat`, `setSmallIcon`, and
@@ -151,13 +150,19 @@ The task API-29 image reports night mode locked off: `cmd uimode night yes` stil
 - Read authorization and hash verification happen in the core before the service returns a read-only descriptor. No internal content path is returned in public JSON. Core error messages are replaced with safe platform messages.
 - Argument JSON is bounded at 16 KiB; response JSON at 512 KiB. This local slice has bounded listings, not a production paging API. The Browser exposes actual `hasMore` flags for items, collection contents, collections and versions instead of treating partial results as complete; name search applies only to loaded items. Durable upload jobs/progress and quota scheduling remain future work.
 - Browser exports by copying the service descriptor into the user's chosen destination. “Export and open” opens that destination, not a repository path or a browser-hosted content engine.
-- Backup and device-transfer extraction are disabled; Android application isolation remains the boundary. Only Browser requests network access, for the public release updater; Service still requests no network access in this local slice.
+- Backup and device-transfer extraction are disabled; Android application isolation remains the boundary. Browser uses network access for the public release updater. Service uses it for foreground, user-initiated pairing on the local network and requests camera access only when scanning.
 
 ## UI scope
 
 Items have real loading/empty/error states, name search, adaptive grid/list, file import, attributes, immutable history, new-version import, current/historical export and export-and-open. Collections can be created, browsed and populated with references to existing items. Diagnostics show actual service health/counts/stable IDs. Light/dark follow the system.
 
-Saved Queries, pairing and replication are visibly not implemented. Settings checks the public paginated GitHub release inventory for the Android publication, independently of Windows; see the update flow below. Collection removal/deletion, rename and access-policy mutation exist in the service allowlist but are not exposed in this initial UI. This is not full first-release acceptance.
+Saved Queries and replication are not implemented. Settings checks the public GitHub release inventory for the Android publication, independently of Windows; see the update flow below. Collection removal/deletion, rename and access-policy mutation exist in the service allowlist but are not exposed in this initial UI. This is not full first-release acceptance.
+
+## Pair with a Windows PC
+
+Pairing requires Android 10 or later. On Windows, open **Storage Service → Devices → Add Android phone**, select the address on your local network, and show the pairing QR code. On Android, launch **Storage Service** (not Storage Browser) and choose **Scan QR code**. To join without a camera, choose **Add device** on Windows instead, and enter the PC's hostname or IPv4 address in the Android app.
+
+Compare all six digits on both screens. Confirm the match on Android, then approve the device on Windows. This saves the paired coordinator and does not copy files or extend Browser permissions. See the [device pairing contract](../../contracts/device-pairing.md).
 
 ## Application updates
 

@@ -73,7 +73,7 @@
           <TextBlock Text="Changed Browser binaries require new service-owned approval. Updates replace application binaries, not your repository or consent state." TextWrapping="Wrap" FontSize="12" Foreground="#A5B7C4"/>
           <TextBlock Text="Windows releases are unsigned; only install updates you trust. Published placeholder versions need one manual in-place installer upgrade to acquire in-app updates. Do not uninstall or clear service data." TextWrapping="Wrap" FontSize="12" Foreground="#A5B7C4"/>
           <TextBlock Text="Packaged Browser identity is preferred. Unpackaged installed builds require explicit service-owned consent; development builds require explicit hash enrollment. See the Windows README." TextWrapping="Wrap" FontSize="12" Foreground="#A5B7C4"/>
-          <TextBlock Text="Device pairing, replication, saved queries and placement policies are not implemented in this local build." TextWrapping="Wrap" FontSize="12" Foreground="#A5B7C4"/>
+          <TextBlock Text="Open Devices from the Storage Service tray icon to pair Windows PCs. File replication, saved queries and placement policies are not available in this build." TextWrapping="Wrap" FontSize="12" Foreground="#A5B7C4"/>
          </StackPanel></Expander>
         </StackPanel>
        </Grid>

@@ -45,7 +45,8 @@ test('Settings reclaims the inspector column, anchors icon navigation, and group
   assert.match(main, /C<Border>\("InspectorHost"\).Visibility = target == "settings" \? Visibility.Collapsed : Visibility.Visible/);
   assert.match(main, /C<TextBlock>\("Status"\).Visibility = target == "settings" \? Visibility.Collapsed : Visibility.Visible/);
   assert.doesNotMatch(main, /\(string\).*\.Content/);
-  for (const text of ['Updates', 'Local service', 'About Storage', 'Security and build information', 'Windows releases are unsigned', 'Device pairing, replication']) assert.ok(xaml.includes(text), text);
+  for (const text of ['Updates', 'Local service', 'About Storage', 'Security and build information', 'Windows releases are unsigned', 'Open Devices from the Storage Service tray icon']) assert.ok(xaml.includes(text), text);
+  assert.ok(!xaml.includes('Device pairing, replication'), 'the local-build notice must not deny the separate Windows enrollment workflow');
   assert.doesNotMatch(xaml, /WebView/);
 });
 test('available notes use real on-demand disclosure and a separate retry without gating download', () => {

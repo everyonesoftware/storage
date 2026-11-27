@@ -128,3 +128,24 @@ test('startup errors are refreshed on reopen and do not hide lifecycle errors', 
   assert.match(tray, /ApplyFonts\(\); Layout\(\); ReadStartup\(\); Refresh\(\);/);
   assert.match(tray, /catch \(Exception e\) when \(IsStartupError\(e\)\) \{ startupError \?\?= "Cannot read startup setting\."; \}/);
 });
+
+test('Devices routes through the native tray and closes when the service stops', () => {
+  const tray = read('apps/windows/Storage.Service/NativeTrayWindow.cs');
+  assert.match(tray, /AddButton\(DevicesId, "Devices"\)/);
+  assert.match(tray, /EnableWindow\(buttons\[DevicesId\], enabled && status == TrayStatus\.Running\)/);
+  assert.match(tray, /case DevicesId when !operationPending && controller\.Status == TrayStatus\.Running:/);
+  assert.match(tray, /pairingWindow\.HandleMessage\(ref message\)/);
+  assert.match(tray, /if \(status != TrayStatus\.Running\) pairingWindow\.Close\(\)/);
+  assert.match(tray, /operationPending = true;[^\n]*pairingWindow\.Close\(\)/);
+  assert.match(tray, /quitting = true; pairingWindow\.Close\(\)/);
+});
+test('Android QR is an explicit Service action, separate from manual pairing', () => {
+  const source = read('apps/windows/Storage.Service/Pairing/PairingWindow.cs');
+  assert.match(source, /Button\("Add device"[^\n]+StartPairing\(null\)/);
+  assert.match(source, /Button\("Add Android phone"[^\n]+ShowQrAddresses/);
+  assert.match(source, /pairing\.HostQrAsync\(qrAddress, DisplayQr, Confirm, operation\.Token\)/);
+  assert.match(source, /case 0x000f when window == hwnd && qr is not null/);
+  assert.match(source, /ShowWindow\(qrStatus, modules is null \? 5 : 0\)/);
+  assert.match(source, /private void Page\([\s\S]*?qr = null;/);
+  assert.match(source, /internal void Close\(\)[\s\S]*?qr = null;/);
+});

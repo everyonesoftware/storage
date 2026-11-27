@@ -54,10 +54,16 @@ internal static class TrayWin32
     [DllImport("user32.dll")] internal static extern void PostQuitMessage(int code);
     [DllImport("user32.dll")] internal static extern bool ShowWindow(nint hwnd, int command);
     [DllImport("user32.dll")] internal static extern bool SetForegroundWindow(nint hwnd);
+    [DllImport("user32.dll")] internal static extern nint GetForegroundWindow();
     [DllImport("user32.dll")] internal static extern nint SetFocus(nint hwnd);
     [DllImport("user32.dll")] internal static extern nint GetFocus();
     [DllImport("user32.dll")] internal static extern bool IsWindowEnabled(nint hwnd);
     [DllImport("user32.dll")] internal static extern bool IsWindowVisible(nint hwnd);
+    [DllImport("user32.dll")] internal static extern bool IsChild(nint parent, nint hwnd);
+    [DllImport("user32.dll")] internal static extern nint GetSysColorBrush(int index);
+    [DllImport("user32.dll")] internal static extern uint GetSysColor(int index);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern int GetWindowText(nint hwnd, System.Text.StringBuilder text, int maxCount);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SendMessageW")] internal static extern nint SendText(nint hwnd, uint message, nuint wParam, string text);
     [DllImport("user32.dll")] internal static extern bool EnableWindow(nint hwnd, bool enabled);
     [DllImport("user32.dll")] internal static extern bool DestroyWindow(nint hwnd);
     [DllImport("user32.dll")] internal static extern bool SetWindowPos(nint hwnd, nint after, int x, int y, int width, int height, uint flags);

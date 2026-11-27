@@ -9,8 +9,10 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="ZXing.Net" Version="0.16.11" />
     <ProjectReference Include="../Storage.Client/Storage.Client.csproj" />
     <Content Include="Assets/Storage.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="Licenses/ZXing.Net.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup Condition="Exists('../../../artifacts/native/windows-x64/storage_core.dll')">
     <None Include="../../../artifacts/native/windows-x64/storage_core.dll" Link="storage_core.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

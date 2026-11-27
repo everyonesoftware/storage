@@ -101,7 +101,8 @@ function Assert-StandalonePayload([string]$Directory, [string]$ReleaseVersion, [
     foreach ($name in @('Storage.Browser.exe','Storage.Browser.dll','Storage.Browser.deps.json','Storage.Browser.runtimeconfig.json',
         'resources.pri','Assets/Storage.ico','Assets/Storage.png','Microsoft.UI.Xaml.dll','Microsoft.WindowsAppRuntime.dll','coreclr.dll','hostfxr.dll',
         'Service/Storage.Service.exe','Service/Storage.Service.dll','Service/Storage.Service.deps.json','Service/Storage.Service.runtimeconfig.json',
-        'Service/Assets/Storage.ico','Service/coreclr.dll','Service/hostfxr.dll','Service/storage_core.dll')) {
+        'Service/Assets/Storage.ico','Service/coreclr.dll','Service/hostfxr.dll','Service/storage_core.dll',
+        'Service/zxing.dll','Service/Licenses/ZXing.Net.txt')) {
         $file = Get-Item -LiteralPath (Join-Path $Directory $name)
         if ($file.Length -le 0 -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw "Incomplete standalone payload: $name" }
     }
