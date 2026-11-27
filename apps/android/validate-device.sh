@@ -38,7 +38,12 @@ run_restart_tests() (
 run_restart_tests
 run_test service-binder com.everyonesoftware.storage.service com.everyonesoftware.storage.service.StorageBinderTest 8
 adb -s "$serial" shell pm revoke com.everyonesoftware.storage.service android.permission.CAMERA
-adb -s "$serial" shell pm clear-permission-flags com.everyonesoftware.storage.service android.permission.CAMERA user-set user-fixed
+# The fresh API 29 CI emulator has no prior permission decision and does not
+# implement clear-permission-flags. On supported systems, reset reused test data.
+package_help=$(adb -s "$serial" shell cmd package help)
+if [[ "$package_help" == *clear-permission-flags* ]]; then
+ adb -s "$serial" shell pm clear-permission-flags com.everyonesoftware.storage.service android.permission.CAMERA user-set user-fixed
+fi
 run_test service-pairing com.everyonesoftware.storage.service com.everyonesoftware.storage.service.PairingActivityTest 7
 run_test denied-caller com.everyonesoftware.storage.denied com.everyonesoftware.storage.denied.DeniedCallerTest 1
 adb -s "$serial" shell am force-stop com.everyonesoftware.storage.browser

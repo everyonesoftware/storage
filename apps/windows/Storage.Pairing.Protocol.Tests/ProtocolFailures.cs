@@ -205,7 +205,8 @@ internal sealed class ProtocolFailures(X509Certificate2 hostIdentity, X509Certif
         ApplicationProtocols = [new SslApplicationProtocol("storage-pairing/1")],
         AllowTlsResume = false,
         CertificateChainPolicy = new X509ChainPolicy { DisableCertificateDownloads = true, RevocationMode = X509RevocationMode.NoCheck },
-        ClientCertificateContext = identity is null ? null : SslStreamCertificateContext.Create(identity, null, offline: true),
+        ClientCertificates = identity is null ? null : [identity],
+        LocalCertificateSelectionCallback = identity is null ? null : (_, _, _, _, _) => identity,
         RemoteCertificateValidationCallback = (_, certificate, _, _) => certificate is not null,
     };
 

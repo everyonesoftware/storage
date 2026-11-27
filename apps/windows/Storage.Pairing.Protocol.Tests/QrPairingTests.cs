@@ -90,7 +90,9 @@ internal static class QrPairingTests
                     TargetHost = "storage-pairing",
                     EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
                     ApplicationProtocols = [new SslApplicationProtocol(result == Result.LegacyAlpn ? "storage-pairing/1" : "storage-pairing-qr/1")],
-                    ClientCertificateContext = SslStreamCertificateContext.Create(joinIdentity, null, offline: true),
+                    ClientCertificates = [joinIdentity],
+                    LocalCertificateSelectionCallback = (_, _, _, _, _) => joinIdentity,
+                    AllowTlsResume = false,
                     RemoteCertificateValidationCallback = (_, leaf, _, _) => leaf?.GetCertHashString(HashAlgorithmName.SHA256) == Digest(hostIdentity),
                 }, ct);
             }
