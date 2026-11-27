@@ -9,6 +9,34 @@ import { spawnSync } from 'node:child_process';
 const root = resolve(import.meta.dirname, '..');
 const scratch = process.env.TMPDIR || tmpdir();
 
+test('pairing permission setup handles API 29 help status without swallowing ADB errors', () => {
+  const script = readFileSync(join(root, 'apps/android/validate-device.sh'), 'utf8');
+  const block = script.match(/^adb .*pm revoke .*CAMERA\n[\s\S]*?(?=^run_test service-pairing )/m)?.[0];
+  assert.ok(block, 'locate the actual pairing setup immediately before instrumentation');
+  const adb = `serial=fixture
+adb() {
+ case "$*" in
+  *'pm revoke '*) printf 'revoke\n';;
+  *'cmd package help') printf '%s\n' "$HELP_TEXT"; return "$HELP_STATUS";;
+  *'pm clear-permission-flags '*) printf 'clear\n';;
+  *) return 99;;
+ esac
+}
+`;
+  const header = 'Package manager (package) commands:';
+  for (const [text, status, expected, calls] of [
+    [header, 255, 0, 'revoke\n'],
+    [`${header}\n  clear-permission-flags`, 0, 0, 'revoke\nclear\n'],
+    ['adb: device offline', 1, 1, 'revoke\n'],
+    ['Exception occurred while executing:', 255, 255, 'revoke\n'],
+  ]) {
+    const run = spawnSync('bash', ['-eu'], { input: adb + block, encoding: 'utf8',
+      env: { ...process.env, HELP_TEXT: text, HELP_STATUS: String(status) } });
+    assert.equal(run.status, expected, text);
+    assert.equal(run.stdout, calls, text);
+  }
+});
+
 test('portable Android native helper builds only two pinned Android targets', () => {
   assert.ok(existsSync(join(root, 'scripts/build-android-native.sh')), 'Android-only native helper is implemented');
   const fixture = mkdtempSync(join(scratch, 'storage-native-helper-test-'));

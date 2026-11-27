@@ -40,7 +40,13 @@ run_test service-binder com.everyonesoftware.storage.service com.everyonesoftwar
 adb -s "$serial" shell pm revoke com.everyonesoftware.storage.service android.permission.CAMERA
 # The fresh API 29 CI emulator has no prior permission decision and does not
 # implement clear-permission-flags. On supported systems, reset reused test data.
-package_help=$(adb -s "$serial" shell cmd package help)
+# The API 29 help handler prints a valid command list but returns -1 (255 via adb).
+help_status=0
+package_help=$(adb -s "$serial" shell cmd package help) || help_status=$?
+if (( help_status != 0 && help_status != 255 )) || [[ "$package_help" != 'Package manager (package) commands:'* ]]; then
+ printf 'Unable to inspect package manager commands (status %s): %s\n' "$help_status" "$package_help" >&2
+ exit "$((help_status == 0 ? 1 : help_status))"
+fi
 if [[ "$package_help" == *clear-permission-flags* ]]; then
  adb -s "$serial" shell pm clear-permission-flags com.everyonesoftware.storage.service android.permission.CAMERA user-set user-fixed
 fi
