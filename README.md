@@ -7,7 +7,7 @@ Choose your platform. Each platform keeps its newest verified manifest-backed pu
 
 | Platform | Version | Download | Status |
 | --- | --- | --- | --- |
-| Windows x64 | 0.1.30 | [Installer (.exe)](https://github.com/everyonesoftware/storage/releases/download/v0.1.30/StorageWindows-0.1.30-win-x64-Setup.exe) · [SHA-256](https://github.com/everyonesoftware/storage/releases/download/v0.1.30/StorageWindows-0.1.30-win-x64-Setup.exe.sha256) | Unsigned; Windows may show an unknown-publisher/SmartScreen warning. |
+| Windows x64 | 0.1.34 | [Installer (.exe)](https://github.com/everyonesoftware/storage/releases/download/v0.1.34/StorageWindows-0.1.34-win-x64-Setup.exe) · [SHA-256](https://github.com/everyonesoftware/storage/releases/download/v0.1.34/StorageWindows-0.1.34-win-x64-Setup.exe.sha256) | Unsigned; Windows may show an unknown-publisher/SmartScreen warning. |
 | Android | 0.1.32 | [Service APK](https://github.com/everyonesoftware/storage/releases/download/v0.1.32/Storage-Service-0.1.32.apk) · [Browser APK](https://github.com/everyonesoftware/storage/releases/download/v0.1.32/Storage-Browser-0.1.32.apk) · [SHA-256](https://github.com/everyonesoftware/storage/releases/download/v0.1.32/Storage-android-SHA256SUMS) | Install Service first, then Browser. Signed with the Storage release key. |
 
 Verify SHA-256 checksums before installation. Unchanged platforms retain their original release, version and source identity. These downloads are not an in-app update feed.
