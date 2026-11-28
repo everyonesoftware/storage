@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="../Storage.Client/Storage.Client.csproj" />
     <PackageReference Include="Velopack" Version="1.2.161" />
+    <PackageReference Include="EveryoneSoftware.WindowsCommon" Version="0.1.6" />
     <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="1.8.260803003" />
     <EmbeddedResource Include="Shell.xaml" LogicalName="Storage.Browser.Shell.xaml" />
     <!-- WinUI already includes images; publish one runtime/PRI entry per asset. -->

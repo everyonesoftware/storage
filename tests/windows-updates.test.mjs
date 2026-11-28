@@ -3,21 +3,29 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const root = new URL('../apps/windows/Storage.Browser/', import.meta.url);
 const read = path => fs.readFileSync(new URL(path, root), 'utf8');
-test('Settings exposes named native update actions, progress, live status and actual assembly version', () => {
+test('Settings uses the published shared package and one native update host without duplicate commands', () => {
   const xaml = read('Shell.xaml');
-  for (const [tag, name] of [['Button', 'CheckUpdates'], ['Button', 'DownloadUpdate'], ['Button', 'RestartUpdate'], ['ProgressBar', 'UpdateProgress'], ['TextBlock', 'ApplicationVersion']])
-    assert.match(xaml, new RegExp(`<${tag}[^>]*x:Name="${name}"`));
-  assert.match(xaml, /x:Name="UpdateStatus"[^>]*AutomationProperties.LiveSetting="Polite"/);
+  assert.match(read('Storage.Browser.csproj'), /PackageReference Include="EveryoneSoftware.WindowsCommon" Version="0\.1\.6"/);
+  assert.match(xaml, /<ContentControl[^>]*x:Name="UpdatesHost"[^>]*\/>/);
+  assert.doesNotMatch(xaml, /x:Name="(?:CheckUpdates|DownloadUpdate|RestartUpdate|UpdateProgress|ApplicationVersion|UpdateStatus)"/);
   assert.doesNotMatch(xaml, /0\.1\.0|not connected to the release feed/);
 });
 test('Panel is attached after XAML load, disposed with window and routes user actions through controller', () => {
-  const main = read('MainWindow.cs'), panel = read('WindowsUpdatesPanel.cs');
-  assert.match(main, /updates = new WindowsUpdatesPanel\(root, DispatcherQueue, PrepareUpdateRestartAsync\)/);
+  const main = read('MainWindow.cs'), panel = read('WindowsUpdateSettings.cs');
+  assert.match(main, /updates = new WindowsUpdateSettings\(root, DispatcherQueue, PrepareUpdateRestartAsync\)/);
   assert.match(main, /updates\.Dispose\(\)/);
   assert.match(main, /if \(busy\) throw new InvalidOperationException/);
   assert.doesNotMatch(main, /No network check was performed/);
   assert.match(panel, /AssemblyInformationalVersionAttribute/);
-  for (const action of ['CheckAsync', 'DownloadAsync', 'RestartAsync']) assert.match(panel, new RegExp(`controller\\.${action}\\(\\)`));
+  for (const action of ['Check', 'Download', 'Restart']) {
+    assert.match(panel, new RegExp(`panel\\.${action}Requested \\+= ${action}Clicked`));
+    assert.match(panel, new RegExp(`controller\\.${action}Async\\(\\)`));
+  }
+  assert.match(panel, /new WindowsUpdatesPanel\("Storage", build.Split\('\+'\)\[0\]\)/);
+  assert.match(panel, /Content = panel.View/);
+  assert.match(panel, /WindowsUpdatePhase\.Downloading or WindowsUpdatePhase\.Verifying => UpdatePhase\.Downloading/);
+  assert.match(panel, /restartAllowed: state.Phase == WindowsUpdatePhase.Ready/);
+  assert.doesNotMatch(panel, /AllowRecheckDuringDownloadOrReady/);
   assert.match(panel, /Render\(controller.Status\)/);
   assert.match(panel, /TryEnqueue/);
   assert.doesNotMatch(panel, /\.Parent/);
@@ -49,15 +57,23 @@ test('Settings reclaims the inspector column, anchors icon navigation, and group
   assert.ok(!xaml.includes('Device pairing, replication'), 'the local-build notice must not deny the separate Windows enrollment workflow');
   assert.doesNotMatch(xaml, /WebView/);
 });
+test('Local service and About use shared chrome without losing app-owned details', () => {
+  const xaml = read('Shell.xaml'), main = read('MainWindow.cs');
+  for (const host of ['LocalServiceHost', 'AboutStorageHost']) {
+    assert.match(xaml, new RegExp(`<ContentControl[^>]*x:Name="${host}"`));
+    assert.match(main, new RegExp(`SetSettingsCard\\("${host}"`));
+  }
+  assert.match(main, /slots.Children.Clear\(\);\s+host.Content = SettingsCard.Create\(header, body, glyph\)/);
+});
 test('available notes use real on-demand disclosure and a separate retry without gating download', () => {
-  const xaml = read('Shell.xaml'), panel = read('WindowsUpdatesPanel.cs');
-  for (const [tag, name] of [['TextBlock', 'UpdateTitle'], ['TextBlock', 'OfferedVersion'], ['Expander', 'WhatsNew'], ['Button', 'RetryChangelog'], ['StackPanel', 'NotesGroups'], ['Expander', 'CommitDetails']]) assert.match(xaml, new RegExp(`<${tag}[^>]*x:Name="${name}"`));
+  const xaml = read('Shell.xaml'), panel = read('WindowsUpdateSettings.cs');
+  for (const [tag, name] of [['Expander', 'WhatsNew'], ['Button', 'RetryChangelog'], ['StackPanel', 'NotesGroups'], ['Expander', 'CommitDetails']]) assert.match(xaml, new RegExp(`<${tag}[^>]*x:Name="${name}"`));
+  assert.match(panel, /changelog: hasOffer \? whatsNew : null/);
   assert.match(xaml, /x:Name="WhatsNew"[^>]*IsExpanded="False"/);
   assert.match(panel, /Expanding \+= NotesExpanded/);
   assert.match(panel, /await notes.LoadAsync\(\)/);
   assert.match(panel, /notes.Select\(/);
   assert.match(panel, /notes.Dispose\(\)/);
-  assert.match(panel, /Current Version: /);
   assert.match(panel, /ApplicationBuild/);
   assert.doesNotMatch(panel, /ReleaseNotes|ReleaseBody|Version .*→/);
 });

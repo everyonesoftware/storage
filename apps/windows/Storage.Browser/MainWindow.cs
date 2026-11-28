@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Text;
+using EveryoneSoftware.WindowsCommon;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
@@ -17,7 +18,8 @@ public sealed partial class MainWindow : Window
 {
     private readonly Grid root;
     private readonly StorageClient client;
-    private readonly WindowsUpdatesPanel updates;
+    private readonly WindowsUpdateSettings updates;
+    private readonly TextBlock serviceHealth, serviceRepository, serviceDetails;
     private Item[] items = [];
     private Collection[] collections = [];
     private Item? selected;
@@ -79,7 +81,12 @@ public sealed partial class MainWindow : Window
         {
             if (e.ClickedItem is FrameworkElement { Tag: Collection collection }) await Run(async () => { filter = collection; SetPage("items"); await RefreshAsync(); });
         };
-        updates = new WindowsUpdatesPanel(root, DispatcherQueue, PrepareUpdateRestartAsync);
+        serviceHealth = C<TextBlock>("ServiceHealth");
+        serviceRepository = C<TextBlock>("ServiceRepository");
+        serviceDetails = C<TextBlock>("ServiceDetails");
+        updates = new WindowsUpdateSettings(root, DispatcherQueue, PrepareUpdateRestartAsync);
+        SetSettingsCard("LocalServiceHost", "\uE950");
+        SetSettingsCard("AboutStorageHost", "\uE946");
         C<Grid>("BrowseHost").DragOver += (_, e) => { if (!busy && e.DataView.Contains(StandardDataFormats.StorageItems)) { e.AcceptedOperation = DataPackageOperation.Copy; e.DragUIOverride.Caption = "Import into Storage"; } };
         C<Grid>("BrowseHost").Drop += async (_, e) =>
         {
@@ -100,6 +107,16 @@ public sealed partial class MainWindow : Window
         Closed += (_, _) => { updates.Dispose(); lifetime.Cancel(); lifetime.Dispose(); };
         SetPage("items");
     }
+    private void SetSettingsCard(string name, string glyph)
+    {
+        var host = C<ContentControl>(name);
+        var slots = (StackPanel)host.Content;
+        var header = (FrameworkElement)slots.Children[0];
+        var body = (FrameworkElement)slots.Children[1];
+        slots.Children.Clear();
+        host.Content = SettingsCard.Create(header, body, glyph);
+    }
+
     private Task PrepareUpdateRestartAsync()
     {
         // No unsaved in-memory repository state: all mutations complete in the service.
@@ -197,19 +214,19 @@ public sealed partial class MainWindow : Window
     }
     private async Task HealthAsync()
     {
-        C<TextBlock>("ServiceHealth").Text = "Connecting…";
-        C<TextBlock>("ServiceRepository").Text = "Unavailable";
-        C<TextBlock>("ServiceDetails").Text = "Device and data store IDs unavailable.";
+        serviceHealth.Text = "Connecting…";
+        serviceRepository.Text = "Unavailable";
+        serviceDetails.Text = "Device and data store IDs unavailable.";
         try
         {
             var health = await client.HealthAsync(lifetime.Token);
-            C<TextBlock>("ServiceHealth").Text = health.Status == "healthy" ? "● Healthy" : health.Status;
-            C<TextBlock>("ServiceRepository").Text = $"{health.ItemCount} items · {health.VersionCount} immutable versions";
-            C<TextBlock>("ServiceDetails").Text = $"Device ID\n{health.DeviceId}\n\nData store ID\n{health.DataStoreId}";
+            serviceHealth.Text = health.Status == "healthy" ? "● Healthy" : health.Status;
+            serviceRepository.Text = $"{health.ItemCount} items · {health.VersionCount} immutable versions";
+            serviceDetails.Text = $"Device ID\n{health.DeviceId}\n\nData store ID\n{health.DataStoreId}";
         }
         catch
         {
-            C<TextBlock>("ServiceHealth").Text = "Not connected";
+            serviceHealth.Text = "Not connected";
             throw;
         }
     }

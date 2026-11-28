@@ -32,12 +32,9 @@
 
       <StackPanel>
        <TextBlock Text="Updates" Style="{StaticResource SettingsSection}"/>
-       <Grid Margin="0,0,0,16" ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="ApplicationVersion" FontSize="17" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/><Button x:Name="CheckUpdates" Grid.Column="1" Content="Check for updates" Padding="14,9"/></Grid>
-       <Border Background="#1C2933" BorderBrush="#32424E" BorderThickness="1" CornerRadius="8" Padding="20,18">
-        <StackPanel Spacing="12">
-         <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock x:Name="UpdateTitle" Text="Not checked yet" FontSize="23" FontWeight="SemiBold" TextWrapping="Wrap"/><TextBlock x:Name="OfferedVersion" Grid.Column="1" Foreground="{StaticResource Accent}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" Visibility="Collapsed"/></Grid>
-         <TextBlock x:Name="UpdateStatus" AutomationProperties.LiveSetting="Polite" Text="Check for updates when you choose." TextWrapping="Wrap" Foreground="#A5B7C4"/>
-         <Expander x:Name="WhatsNew" IsExpanded="False" Visibility="Collapsed" Style="{StaticResource SettingsDisclosure}">
+       <ContentControl x:Name="UpdatesHost" IsTabStop="False" HorizontalContentAlignment="Stretch"/>
+       <ContentControl x:Name="ChangelogStagingHost" Visibility="Collapsed" IsTabStop="False">
+         <Expander x:Name="WhatsNew" IsExpanded="False" Style="{StaticResource SettingsDisclosure}">
           <Expander.Header><Grid ColumnSpacing="16"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="What’s new" FontWeight="SemiBold"/><TextBlock x:Name="ChangeCount" Grid.Column="1" Foreground="#A5B7C4" FontSize="12" VerticalAlignment="Center"/></Grid></Expander.Header>
           <StackPanel Spacing="14">
            <TextBlock x:Name="NotesStatus" AutomationProperties.LiveSetting="Polite" TextWrapping="Wrap" Foreground="#A5B7C4"/>
@@ -46,28 +43,28 @@
            <Expander x:Name="CommitDetails" Header="Commit details" IsExpanded="False" Visibility="Collapsed" Style="{StaticResource SettingsDisclosure}"><StackPanel Spacing="10"><TextBlock x:Name="SourceRange" TextWrapping="Wrap" IsTextSelectionEnabled="True" FontSize="12" Foreground="#A5B7C4"/><StackPanel x:Name="CommitSubjects" Spacing="8"/></StackPanel></Expander>
           </StackPanel>
          </Expander>
-         <ProgressBar x:Name="UpdateProgress" Visibility="Collapsed" Minimum="0" Maximum="100" AutomationProperties.Name="Update download progress" Height="4"/>
-         <Button x:Name="DownloadUpdate" Content="Download update" Visibility="Collapsed" Background="{StaticResource Accent}" Foreground="#10212A" BorderThickness="0" FontWeight="SemiBold" Padding="16,10"/>
-         <Button x:Name="RestartUpdate" Content="Restart and install" Visibility="Collapsed" Background="{StaticResource Accent}" Foreground="#10212A" BorderThickness="0" FontWeight="SemiBold" Padding="16,10"/>
-        </StackPanel>
-       </Border>
+       </ContentControl>
       </StackPanel>
       <StackPanel>
        <TextBlock Text="Local service" Style="{StaticResource SettingsSection}"/>
-       <Border Background="#1C2933" BorderBrush="#32424E" BorderThickness="1" CornerRadius="8" Padding="20,18">
-        <StackPanel Spacing="16">
+       <ContentControl x:Name="LocalServiceHost" IsTabStop="False" HorizontalContentAlignment="Stretch">
+        <StackPanel>
          <Grid ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel Spacing="4"><TextBlock Text="Storage service" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="This device · Local workspace" Foreground="#A5B7C4" FontSize="12"/></StackPanel><TextBlock x:Name="ServiceHealth" Grid.Column="1" Text="Not connected" Foreground="{StaticResource Accent}" VerticalAlignment="Top" AutomationProperties.LiveSetting="Polite"/></Grid>
+         <StackPanel Spacing="16">
          <Grid ColumnSpacing="20"><Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Repository" Foreground="#A5B7C4"/><TextBlock x:Name="ServiceRepository" Grid.Column="1" Text="Unavailable" TextWrapping="Wrap"/></Grid>
          <Grid ColumnSpacing="20"><Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="Local owner" Foreground="#A5B7C4"/><TextBlock Text="local-owner" Grid.Column="1"/></Grid>
          <Expander x:Name="TechnicalDetails" Header="Technical details" IsExpanded="False" Style="{StaticResource SettingsDisclosure}"><StackPanel Spacing="14"><TextBlock x:Name="ServiceDetails" Text="Device and data store IDs unavailable." Foreground="#A5B7C4" FontSize="12" TextWrapping="Wrap" IsTextSelectionEnabled="True"/><TextBlock Text="Application build" Foreground="#A5B7C4" FontSize="12"/><TextBlock x:Name="ApplicationBuild" FontSize="12" TextWrapping="Wrap" IsTextSelectionEnabled="True"/></StackPanel></Expander>
+         </StackPanel>
         </StackPanel>
-       </Border>
+       </ContentControl>
       </StackPanel>
       <StackPanel>
        <TextBlock Text="About Storage" Style="{StaticResource SettingsSection}"/>
-       <Grid ColumnSpacing="14"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-        <Image x:Name="AboutBrandIcon" Width="36" Height="36" AutomationProperties.AccessibilityView="Raw" VerticalAlignment="Top" Margin="0,4,0,0"/>
-        <StackPanel Grid.Column="1" Spacing="8"><TextBlock Text="Storage for Windows" FontWeight="SemiBold"/><TextBlock Text="Your files. One private store. No cloud account required." Foreground="#A5B7C4" FontSize="12" TextWrapping="Wrap"/>
+       <ContentControl x:Name="AboutStorageHost" IsTabStop="False" HorizontalContentAlignment="Stretch">
+        <StackPanel>
+         <StackPanel Spacing="4"><TextBlock Text="Storage for Windows" FontSize="16" FontWeight="SemiBold"/><TextBlock Text="Your files. One private store. No cloud account required." Foreground="#A5B7C4" FontSize="12" TextWrapping="Wrap"/></StackPanel>
+         <StackPanel Spacing="8">
+         <Image x:Name="AboutBrandIcon" Width="36" Height="36" HorizontalAlignment="Left" AutomationProperties.AccessibilityView="Raw"/>
          <Expander x:Name="SecurityDetails" Header="Security and build information" IsExpanded="False" Style="{StaticResource SettingsDisclosure}"><StackPanel Spacing="10">
           <TextBlock Text="The independent per-user service owns the repository. Unregistered applications are denied. This is not a sandbox against same-user full-trust malware or an administrator." TextWrapping="Wrap" FontSize="12" Foreground="#A5B7C4"/>
           <TextBlock Text="Changed Browser binaries require new service-owned approval. Updates replace application binaries, not your repository or consent state." TextWrapping="Wrap" FontSize="12" Foreground="#A5B7C4"/>
@@ -75,8 +72,9 @@
           <TextBlock Text="Packaged Browser identity is preferred. Unpackaged installed builds require explicit service-owned consent; development builds require explicit hash enrollment. See the Windows README." TextWrapping="Wrap" FontSize="12" Foreground="#A5B7C4"/>
           <TextBlock Text="Open Devices from the Storage Service tray icon to pair Windows PCs. File replication, saved queries and placement policies are not available in this build." TextWrapping="Wrap" FontSize="12" Foreground="#A5B7C4"/>
          </StackPanel></Expander>
+         </StackPanel>
         </StackPanel>
-       </Grid>
+       </ContentControl>
       </StackPanel>
      </StackPanel>
      </Grid>

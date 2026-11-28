@@ -11,7 +11,7 @@ static class SettingsSourceTests
         XNamespace x = "http://schemas.microsoft.com/winfx/2006/xaml";
         var controls = shell.Descendants().Where(e => e.Attribute(x + "Name") is not null)
             .ToDictionary(e => e.Attribute(x + "Name")!.Value, e => e.Name.LocalName);
-        foreach (string file in new[] { "MainWindow.cs", "WindowsUpdatesPanel.cs" })
+        foreach (string file in new[] { "MainWindow.cs", "WindowsUpdateSettings.cs" })
         {
             string code = File.ReadAllText(Path.Combine(directory, file + ".txt"));
             var generics = Regex.Matches(code, "C<([A-Za-z]+)>\\(\"([^\"]+)\"\\)");
@@ -49,8 +49,15 @@ static class SettingsSourceTests
         foreach (string heading in new[] { "Updates", "Local service", "About Storage" })
             FeedTests.Require(content.Descendants().Any(e => e.Attribute("Text")?.Value == heading && e.Attribute("Style")?.Value == "{StaticResource SettingsSection}"), "Windows retains refined section: " + heading);
         Console.WriteLine("PASS selected refined sidebar, main/title geometry, subtitle-free Settings and all three Windows sections");
-        FeedTests.Require(Named("OfferedVersion").Attribute("Foreground")?.Value == "{StaticResource Accent}" && shell.Descendants().Single(e => e.Attribute(x + "Key")?.Value == "Accent").Attribute("Color")?.Value == "#7CD2DD", "Offered version uses the refined cyan accent brush");
-        Console.WriteLine("PASS selected refined offered-version accent from parsed runtime XAML");
+        var expectedHosts = new[] { "UpdatesHost", "LocalServiceHost", "AboutStorageHost" };
+        FeedTests.Require(content.Elements().Select(section => section.Elements().Single(e => e.Name.LocalName == "ContentControl" && e.Attribute("Visibility")?.Value != "Collapsed"))
+            .Select(host => host.Attribute(x + "Name")?.Value).SequenceEqual(expectedHosts), "Shared native cards retain Settings section order");
+        FeedTests.Require(expectedHosts.All(name => Named(name).Attribute("HorizontalContentAlignment")?.Value == "Stretch" &&
+            Named(name).Attribute("IsTabStop")?.Value == "False"), "Shared card hosts stretch without adding tab stops");
+        FeedTests.Require(!Named("UpdatesHost").HasElements && Named("WhatsNew").Parent == Named("ChangelogStagingHost"),
+            "Update card is an empty host; the disclosure can move independently into the shared card");
+        foreach (string host in expectedHosts.Skip(1))
+            FeedTests.Require(Named(host).Elements().Single().Elements().Count() == 2, "Settings card has one header and one body: " + host);
         Console.WriteLine($"PASS actual runtime XAML parses; {controls.Count} unique control names and all MainWindow/update-panel typed lookups agree; disclosures collapsed");
     }
 }

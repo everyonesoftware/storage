@@ -1,4 +1,5 @@
 using System.Reflection;
+using EveryoneSoftware.WindowsCommon;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -7,32 +8,26 @@ using Microsoft.UI.Xaml.Media;
 namespace Storage.Browser;
 
 /// <summary>Bind declared names after runtime XAML load, never parent traversal before Loaded.</summary>
-public sealed partial class WindowsUpdatesPanel : IDisposable
+internal sealed class WindowsUpdateSettings : IDisposable
 {
+    private readonly WindowsUpdatesPanel panel;
     private readonly WindowsUpdateController controller;
     private readonly WindowsUpdateBackend backend;
     private readonly WindowsChangelogController notes;
     private readonly DispatcherQueue dispatcher;
-    private readonly Button check, download, restart, retryNotes;
-    private readonly TextBlock status, title, offeredVersion, changeCount, notesStatus, sourceRange;
+    private readonly Button retryNotes;
+    private readonly TextBlock changeCount, notesStatus, sourceRange;
     private readonly Expander whatsNew, commitDetails;
     private readonly StackPanel notesGroups, commitSubjects;
-    private readonly ProgressBar progress;
+
     private WindowsUpdateOffer? displayedOffer;
     private WindowsChangelog? renderedNotes;
     private bool disposed;
 
-    public WindowsUpdatesPanel(FrameworkElement root, DispatcherQueue dispatcher, Func<Task> prepareRestart)
+    public WindowsUpdateSettings(FrameworkElement root, DispatcherQueue dispatcher, Func<Task> prepareRestart)
     {
         this.dispatcher = dispatcher;
-        check = (Button)root.FindName("CheckUpdates");
-        download = (Button)root.FindName("DownloadUpdate");
-        restart = (Button)root.FindName("RestartUpdate");
         retryNotes = (Button)root.FindName("RetryChangelog");
-        status = (TextBlock)root.FindName("UpdateStatus");
-        title = (TextBlock)root.FindName("UpdateTitle");
-        offeredVersion = (TextBlock)root.FindName("OfferedVersion");
-        progress = (ProgressBar)root.FindName("UpdateProgress");
         whatsNew = (Expander)root.FindName("WhatsNew");
         commitDetails = (Expander)root.FindName("CommitDetails");
         changeCount = (TextBlock)root.FindName("ChangeCount");
@@ -40,17 +35,20 @@ public sealed partial class WindowsUpdatesPanel : IDisposable
         sourceRange = (TextBlock)root.FindName("SourceRange");
         notesGroups = (StackPanel)root.FindName("NotesGroups");
         commitSubjects = (StackPanel)root.FindName("CommitSubjects");
-        var assembly = typeof(WindowsUpdatesPanel).Assembly;
+        var stagingHost = (ContentControl)root.FindName("ChangelogStagingHost");
+        stagingHost.Content = null;
+        var assembly = typeof(WindowsUpdateSettings).Assembly;
         string build = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
             ?? assembly.GetName().Version?.ToString() ?? "unknown";
-        ((TextBlock)root.FindName("ApplicationVersion")).Text = "Current Version: " + build.Split('+')[0];
         ((TextBlock)root.FindName("ApplicationBuild")).Text = build;
+        panel = new WindowsUpdatesPanel("Storage", build.Split('+')[0]);
+        ((ContentControl)root.FindName("UpdatesHost")).Content = panel.View;
         backend = new WindowsUpdateBackend();
         controller = new WindowsUpdateController(backend, prepareRestart);
         notes = new WindowsChangelogController(new WindowsChangelogSource(), build);
-        check.Click += CheckClicked;
-        download.Click += DownloadClicked;
-        restart.Click += RestartClicked;
+        panel.CheckRequested += CheckClicked;
+        panel.DownloadRequested += DownloadClicked;
+        panel.RestartRequested += RestartClicked;
         whatsNew.Expanding += NotesExpanded;
         retryNotes.Click += RetryNotesClicked;
         controller.Changed += OnChanged;
@@ -58,15 +56,15 @@ public sealed partial class WindowsUpdatesPanel : IDisposable
         Render(controller.Status);
     }
 
-    private async void CheckClicked(object sender, RoutedEventArgs e)
+    private async void CheckClicked(object? sender, EventArgs e)
     {
         // Invalidate synchronously before an old notes task can publish during a new check.
         notes.Select(null);
         whatsNew.IsExpanded = false;
         await controller.CheckAsync();
     }
-    private async void DownloadClicked(object sender, RoutedEventArgs e) => await controller.DownloadAsync();
-    private async void RestartClicked(object sender, RoutedEventArgs e) => await controller.RestartAsync();
+    private async void DownloadClicked(object? sender, EventArgs e) => await controller.DownloadAsync();
+    private async void RestartClicked(object? sender, EventArgs e) => await controller.RestartAsync();
     private async void NotesExpanded(Expander sender, ExpanderExpandingEventArgs e) => await notes.LoadAsync();
     private async void RetryNotesClicked(object sender, RoutedEventArgs e) => await notes.LoadAsync();
 
@@ -88,30 +86,24 @@ public sealed partial class WindowsUpdatesPanel : IDisposable
             commitDetails.IsExpanded = false;
         }
         notes.Select(nextOffer);
-        title.Text = hasOffer ? "Update available" : state.Phase switch
+        var phase = state.Phase switch
         {
-            WindowsUpdatePhase.Checking => "Checking for updates…",
-            WindowsUpdatePhase.Current => "Up to date",
-            WindowsUpdatePhase.Error => "Update failed",
-            WindowsUpdatePhase.NotInstalled => "Installed build required",
-            _ => "Not checked yet"
+            WindowsUpdatePhase.Idle => UpdatePhase.Idle,
+            WindowsUpdatePhase.Checking => UpdatePhase.Checking,
+            WindowsUpdatePhase.Current => UpdatePhase.Current,
+            WindowsUpdatePhase.Available => UpdatePhase.Available,
+            // 0.1.6 has no distinct verification phase. Keep Check and Restart disabled,
+            // and keep the backend's verification message visible until it reports Ready.
+            WindowsUpdatePhase.Downloading or WindowsUpdatePhase.Verifying => UpdatePhase.Downloading,
+            WindowsUpdatePhase.Ready => UpdatePhase.Ready,
+            WindowsUpdatePhase.Restarting => UpdatePhase.Restarting,
+            WindowsUpdatePhase.Error => UpdatePhase.Error,
+            WindowsUpdatePhase.NotInstalled => UpdatePhase.NotInstalled,
+            _ => throw new ArgumentOutOfRangeException(nameof(state))
         };
-        offeredVersion.Text = hasOffer ? "Storage " + state.Version : "";
-        offeredVersion.Visibility = hasOffer ? Visibility.Visible : Visibility.Collapsed;
-        whatsNew.Visibility = hasOffer ? Visibility.Visible : Visibility.Collapsed;
-        status.Text = state.Phase == WindowsUpdatePhase.Downloading ? $"{state.Message} {state.Progress}%" : state.Message;
-        status.Visibility = string.IsNullOrEmpty(status.Text) ? Visibility.Collapsed : Visibility.Visible;
-        bool busy = state.Phase is WindowsUpdatePhase.Checking or WindowsUpdatePhase.Downloading or WindowsUpdatePhase.Verifying or WindowsUpdatePhase.Restarting;
-        check.Content = state.Phase == WindowsUpdatePhase.Checking ? "Checking…" : "Check for updates";
-        check.IsEnabled = !busy && state.Phase is not (WindowsUpdatePhase.Ready or WindowsUpdatePhase.NotInstalled);
-        download.Visibility = state.Phase == WindowsUpdatePhase.Available ? Visibility.Visible : Visibility.Collapsed;
-        download.IsEnabled = !busy;
-        restart.Visibility = state.Phase == WindowsUpdatePhase.Ready ? Visibility.Visible : Visibility.Collapsed;
-        restart.IsEnabled = !busy;
-        progress.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
-        progress.IsIndeterminate = state.Phase is WindowsUpdatePhase.Checking or WindowsUpdatePhase.Verifying or WindowsUpdatePhase.Restarting;
-        progress.Value = state.Progress;
         RenderNotes();
+        panel.Render(new(phase, state.Message, hasOffer ? state.Version : null, state.Progress),
+            restartAllowed: state.Phase == WindowsUpdatePhase.Ready, changelog: hasOffer ? whatsNew : null);
     }
 
     private void RenderNotes()
@@ -173,14 +165,15 @@ public sealed partial class WindowsUpdatesPanel : IDisposable
     {
         if (disposed) return;
         disposed = true;
-        check.Click -= CheckClicked;
-        download.Click -= DownloadClicked;
-        restart.Click -= RestartClicked;
+        panel.CheckRequested -= CheckClicked;
+        panel.DownloadRequested -= DownloadClicked;
+        panel.RestartRequested -= RestartClicked;
         whatsNew.Expanding -= NotesExpanded;
         retryNotes.Click -= RetryNotesClicked;
         controller.Changed -= OnChanged;
         notes.Changed -= OnNotesChanged;
         notes.Dispose();
         controller.Dispose();
+        panel.Dispose();
     }
 }
